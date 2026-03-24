@@ -27,7 +27,7 @@ type PatternMode = {
   description: string;
   keyLabels: string[];
   keyHints: string[];
-  sequence: (keys: string[]) => string[];
+  sequence: (keys: string[], variant: MeasureVariant) => string[];
 };
 
 const COUNTDOWN_SECONDS = 3;
@@ -39,6 +39,11 @@ const MEASURE_PRESETS: MeasurePreset[] = [
   { key: "left", title: "왼손 모드", description: "왼손 두 키로 한손 트릴을 측정해요.", defaultKeys: ["A", "S"] },
   { key: "right", title: "오른손 모드", description: "오른손 두 키로 한손 트릴을 측정해요.", defaultKeys: ["K", "L"] },
   { key: "both", title: "양손 모드", description: "좌/우 손 분리 키로 일반적인 교대 트릴을 측정해요.", defaultKeys: ["A", "L"] },
+];
+
+const DRURUK_PRESETS: MeasurePreset[] = [
+  { key: "left", title: "1234 모드", description: "A → S → ; → ' 순서로 입력해요.", defaultKeys: ["A", "S"] },
+  { key: "right", title: "4321 모드", description: "' → ; → S → A 순서로 입력해요.", defaultKeys: ["'", ";"] },
 ];
 
 const PATTERN_MODES: Record<PatternKey, PatternMode> = {
@@ -53,10 +58,10 @@ const PATTERN_MODES: Record<PatternKey, PatternMode> = {
   druruk: {
     key: "druruk",
     title: "드르륵 측정",
-    description: "1234 → 4321 순서로 4키를 왕복 입력하는 패턴을 측정해요.",
+    description: "1234 또는 4321 한 방향 패턴으로 4키 입력 속도와 안정감을 측정해요.",
     keyLabels: ["1번 키", "2번 키", "3번 키", "4번 키"],
-    keyHints: ["예: A", "예: S", "예: D", "예: F"],
-    sequence: (keys) => [keys[0], keys[1], keys[2], keys[3], keys[3], keys[2], keys[1], keys[0]],
+    keyHints: ["예: A", "예: S", "예: ;", "예: '"],
+    sequence: (keys, variant) => (variant === "right" ? [keys[0], keys[1], keys[2], keys[3]] : [keys[0], keys[1], keys[2], keys[3]]),
   },
 };
 
@@ -107,8 +112,9 @@ function normalizeKeyboardEvent(event: KeyboardEvent) {
   return normalizeKey(key);
 }
 
-function getPresetConfig(variant: MeasureVariant) {
-  return MEASURE_PRESETS.find((preset) => preset.key === variant) ?? MEASURE_PRESETS[0];
+function getPresetConfig(variant: MeasureVariant, pattern: PatternKey) {
+  const presets = pattern === "druruk" ? DRURUK_PRESETS : MEASURE_PRESETS;
+  return presets.find((preset) => preset.key === variant) ?? presets[0];
 }
 
 export default function MeasurePage() {
@@ -151,10 +157,10 @@ function MeasurePageContent() {
   const hitFeedbackTimeoutRef = useRef<number | null>(null);
   const expectedIndexRef = useRef(0);
 
-  const activePreset = getPresetConfig(measureVariant);
+  const activePreset = getPresetConfig(measureVariant, pattern);
   const configuredKeys = useMemo(() => keys.map((value) => normalizeKey(value)), [keys]);
   const activeKeys = pattern === "trill" ? configuredKeys.slice(0, 2) : configuredKeys;
-  const expectedSequence = useMemo(() => mode.sequence(activeKeys), [activeKeys, mode]);
+  const expectedSequence = useMemo(() => mode.sequence(activeKeys, measureVariant), [activeKeys, measureVariant, mode]);
   const hasValidKeyConfig = useMemo(() => {
     const unique = new Set(activeKeys.filter(Boolean));
     return activeKeys.length === mode.keyLabels.length && unique.size === activeKeys.length;
@@ -166,7 +172,7 @@ function MeasurePageContent() {
     if (!hasValidKeyConfig) return "중복 없이 서로 다른 키를 설정해야 측정을 시작할 수 있어요.";
     if (sessionState === "countdown") return `준비... ${countdownLeft}초 후 시작`;
     if (sessionState === "running") return `현재 순서: ${expectedSequence[sequenceIndex] ?? expectedSequence[0]}`;
-    if (result) return pattern === "druruk" ? "1234 → 4321 순서를 유지할수록 더 높은 점수가 나와요." : "같은 키 반복은 invalid 처리돼요. 정확도를 유지하면서 BPM을 끌어올려보세요.";
+    if (result) return pattern === "druruk" ? "선택한 모드 순서를 유지할수록 더 높은 점수가 나와요." : "같은 키 반복은 invalid 처리돼요. 정확도를 유지하면서 BPM을 끌어올려보세요.";
     return `${mode.title} · ${activeKeys.join(" / ")}`;
   }, [captureError, countdownLeft, expectedSequence, hasValidKeyConfig, keyCaptureTarget, mode, pattern, result, sequenceIndex, sessionState, activeKeys]);
 
@@ -177,7 +183,7 @@ function MeasurePageContent() {
       setActivePadIndex(null);
       activePadTimeoutRef.current = null;
     }, 120);
-  }, []);
+  }, [setActivePadIndex]);
 
   const triggerHitFeedback = useCallback((type: "good" | "miss") => {
     if (hitFeedbackTimeoutRef.current) window.clearTimeout(hitFeedbackTimeoutRef.current);
@@ -186,7 +192,7 @@ function MeasurePageContent() {
       setHitFeedback(null);
       hitFeedbackTimeoutRef.current = null;
     }, 180);
-  }, []);
+  }, [setHitFeedback]);
 
   const finishRun = useCallback(() => {
     runningRef.current = false;
@@ -214,7 +220,7 @@ function MeasurePageContent() {
       consistencyScore,
       intervals,
     });
-  }, []);
+  }, [setResult, setSessionState]);
 
   const resetStats = useCallback(() => {
     setCountdownLeft(COUNTDOWN_SECONDS);
@@ -236,12 +242,27 @@ function MeasurePageContent() {
     invalidHitsRef.current = 0;
     peakStreakRef.current = 0;
     acceptedTimestampsRef.current = [];
-  }, []);
+  }, [
+    setCountdownLeft,
+    setTimeLeft,
+    setLatestInput,
+    setValidHits,
+    setInvalidHits,
+    setCurrentStreak,
+    setPeakStreak,
+    setResult,
+    setCaptureError,
+    setActivePadIndex,
+    setHitFeedback,
+    setSequenceIndex,
+  ]);
 
   useEffect(() => {
     const nextKeys =
       pattern === "druruk"
-        ? (["A", "S", "D", "F"] as [string, string, string, string])
+        ? (measureVariant === "right"
+            ? (["'", ";", "S", "A"] as [string, string, string, string])
+            : (["A", "S", ";", "'"] as [string, string, string, string]))
         : ([activePreset.defaultKeys[0], activePreset.defaultKeys[1], "S", "K"] as [string, string, string, string]);
 
     const timer = window.setTimeout(() => {
@@ -252,7 +273,7 @@ function MeasurePageContent() {
     }, 0);
 
     return () => window.clearTimeout(timer);
-  }, [activePreset.defaultKeys, pattern, resetStats]);
+  }, [activePreset.defaultKeys, measureVariant, pattern, resetStats]);
 
   useEffect(() => {
     if (sessionState !== "countdown") return;
@@ -379,7 +400,7 @@ function MeasurePageContent() {
   }
 
   function applyPreset(variant: MeasureVariant) {
-    const preset = getPresetConfig(variant);
+    const preset = getPresetConfig(variant, pattern);
     setMeasureVariant(variant);
     setKeys((current) => [preset.defaultKeys[0], preset.defaultKeys[1], current[2], current[3]]);
     setKeyCaptureTarget(null);
@@ -431,37 +452,35 @@ function MeasurePageContent() {
 
       <section className="measure-grid">
         <article className="panel stack-gap-lg start-panel">
-          {pattern === "trill" ? (
-            <div>
-              <p className="section-label">모드 선택</p>
-              <div className="preset-grid">
-                {MEASURE_PRESETS.map((preset) => {
-                  const isActive = preset.key === measureVariant;
-                  return (
-                    <button
-                      key={preset.key}
-                      onClick={() => applyPreset(preset.key)}
-                      disabled={sessionState === "countdown" || sessionState === "running"}
-                      className={`preset-card ${isActive ? "is-active" : ""}`}
-                    >
-                      <strong>{preset.title}</strong>
-                      <span>{preset.description}</span>
-                    </button>
-                  );
-                })}
-              </div>
+          <div>
+            <p className="section-label">모드 선택</p>
+            <div className="preset-grid">
+              {(pattern === "trill" ? MEASURE_PRESETS : DRURUK_PRESETS).map((preset) => {
+                const isActive = preset.key === measureVariant;
+                return (
+                  <button
+                    key={preset.key}
+                    onClick={() => applyPreset(preset.key)}
+                    disabled={sessionState === "countdown" || sessionState === "running"}
+                    className={`preset-card ${isActive ? "is-active" : ""}`}
+                  >
+                    <strong>{preset.title}</strong>
+                    <span>{preset.description}</span>
+                  </button>
+                );
+              })}
             </div>
-          ) : (
-            <div>
-              <p className="section-label">패턴 안내</p>
-              <p className="section-subtitle">{mode.description}</p>
-              <div className="sequence-preview">
-                {expectedSequence.map((key, index) => (
-                  <span key={`${key}-${index}`} className="sequence-chip">{key}</span>
-                ))}
-              </div>
-            </div>
-          )}
+            {pattern === "druruk" ? (
+              <>
+                <p className="section-subtitle">{mode.description}</p>
+                <div className="sequence-preview">
+                  {expectedSequence.map((key, index) => (
+                    <span key={`${key}-${index}`} className="sequence-chip">{key}</span>
+                  ))}
+                </div>
+              </>
+            ) : null}
+          </div>
 
           <div>
             <p className="section-label">키 설정</p>

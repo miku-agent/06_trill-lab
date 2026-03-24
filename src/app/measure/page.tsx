@@ -311,23 +311,23 @@ export default function MeasurePage() {
   return (
     <main className="page-main">
       <section className="page-section compact-hero">
-        <div>
-          <p className="eyebrow">MEASURE MODE</p>
-          <h1 className="page-title">측정 모드</h1>
-        </div>
+        <h1 className="page-title">측정 모드</h1>
         <div className="status-pill">{statusLabel}</div>
+      </section>
+
+      <section className="page-section compact-summary panel">
+        <strong>{activePreset.title}</strong>
+        <span className="compact-summary-divider">·</span>
+        <span>{configuredKeys[0]} / {configuredKeys[1]}</span>
+        <span className="compact-summary-divider">·</span>
+        <span>{helperText}</span>
       </section>
 
       <section className="measure-grid">
         <article className="panel stack-gap-lg">
-          <div>
-            <p className="section-label">현재 세팅</p>
-            <h2 className="section-title">{activePreset.title}</h2>
-            <p className="section-subtitle">{helperText}</p>
-          </div>
 
           <div>
-            <p className="section-label">손 세부 모드</p>
+            <p className="section-label">모드 선택</p>
             <div className="preset-grid">
               {MEASURE_PRESETS.map((preset) => {
                 const isActive = preset.key === measureVariant;
@@ -347,7 +347,7 @@ export default function MeasurePage() {
           </div>
 
           <div>
-            <p className="section-label">키 설정</p>
+            <p className="section-label">키</p>
             <div className="key-grid">
               <KeySettingCard
                 label="첫 번째 키"
@@ -382,7 +382,6 @@ export default function MeasurePage() {
 
         <aside className="stack-gap-lg">
           <article className="panel stat-grid">
-            <Stat label="사용 키" value={`${configuredKeys[0]} / ${configuredKeys[1]}`} />
             <Stat label="마지막 입력" value={latestInput} />
             <Stat label="유효 입력" value={String(validHits)} />
             <Stat label="무효 입력" value={String(invalidHits)} />
@@ -392,11 +391,11 @@ export default function MeasurePage() {
 
           <article className="panel result-panel">
             <p className="section-label">결과</p>
-            <h2 className="result-title">{result ? `${result.bpm} BPM` : "아직 기록이 없어요"}</h2>
+            <h2 className="result-title">{result ? `${result.bpm} BPM` : "-"}</h2>
             <p className="section-subtitle">
               {result
-                ? `${activePreset.title} · 정확도 ${formatPercent(result.accuracy)} · 유효 ${result.validHits} · 무효 ${result.invalidHits} · 최대 스트릭 ${result.peakStreak}`
-                : "측정을 시작하면 결과가 여기에 표시돼요."}
+                ? `정확도 ${formatPercent(result.accuracy)} · 유효 ${result.validHits} · 무효 ${result.invalidHits} · 최대 스트릭 ${result.peakStreak}`
+                : "측정 전"}
             </p>
           </article>
         </aside>
@@ -431,7 +430,7 @@ function KeySettingCard({
 }) {
   return (
     <div className={`key-card ${isCapturing ? "is-capturing" : ""}`}>
-      <span className="section-label">{label}</span>
+      <span className="key-label">{label}</span>
       <div className="key-value">{normalizeKey(value) || "-"}</div>
       <button type="button" onClick={onStartCapture} disabled={disabled} className="secondary-button">
         {isCapturing ? "아무 키나 눌러주세요..." : "키 변경하기"}

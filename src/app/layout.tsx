@@ -1,17 +1,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { HeaderNav } from "./components/header-nav";
 import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Trill Lab",
   description: "16th-note trill BPM benchmark for rhythm game players.",
 };
-
-const NAV_ITEMS = [
-  { href: "/measure", label: "측정 모드" },
-  { href: "/challenge", label: "도전 모드" },
-  { href: "/practice", label: "연습 모드" },
-];
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
@@ -23,13 +18,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
               <span className="brand-mark">TRILL LAB</span>
               <strong>트릴 연습실</strong>
             </Link>
-            <nav className="site-nav" aria-label="주요 모드">
-              {NAV_ITEMS.map((item) => (
-                <Link key={item.href} href={item.href} className="site-nav-link">
-                  {item.label}
-                </Link>
-              ))}
-            </nav>
+            <HeaderNav />
           </div>
         </header>
         <div className="site-shell">{children}</div>

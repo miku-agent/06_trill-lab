@@ -139,6 +139,20 @@ function getDefaultKeys(pattern: PatternKey, variant: MeasureVariant, activePres
   return [activePreset.defaultKeys[0], activePreset.defaultKeys[1], "S", "K"] as [string, string, string, string];
 }
 
+type AnalyticsPayload = Record<string, string | number | boolean | null | undefined>;
+
+declare global {
+  interface Window {
+    dataLayer?: Array<Record<string, unknown>>;
+  }
+}
+
+function trackEvent(event: string, payload: AnalyticsPayload = {}) {
+  if (typeof window === "undefined") return;
+  window.dataLayer = window.dataLayer ?? [];
+  window.dataLayer.push({ event, ...payload });
+}
+
 export default function MeasurePage() {
   return (
     <Suspense fallback={<main className="page-main measure-page" />}>
@@ -234,6 +248,17 @@ function MeasurePageContent() {
     const slowestIntervalMs = intervals.length > 0 ? Math.max(...intervals) : null;
     const consistencyScore = calculateConsistencyScore(intervals);
 
+    trackEvent("measure_finish", {
+      pattern,
+      variant: measureVariant,
+      bpm,
+      accuracy: Math.round(accuracy),
+      valid_hits: validHitsRef.current,
+      invalid_hits: invalidHitsRef.current,
+      peak_streak: peakStreakRef.current,
+      consistency_score: consistencyScore,
+    });
+
     setResult({
       bpm,
       validHits: validHitsRef.current,
@@ -246,7 +271,7 @@ function MeasurePageContent() {
       consistencyScore,
       intervals,
     });
-  }, [setResult, setSessionState]);
+  }, [measureVariant, pattern, setResult, setSessionState]);
 
   const resetStats = useCallback(() => {
     setCountdownLeft(COUNTDOWN_SECONDS);
@@ -416,6 +441,11 @@ function MeasurePageContent() {
 
   function startRun() {
     if (!hasValidKeyConfig || keyCaptureTarget !== null) return;
+    trackEvent("measure_start", {
+      pattern,
+      variant: measureVariant,
+      keys: activeKeys.join("_"),
+    });
     resetStats();
     setSessionState("countdown");
   }

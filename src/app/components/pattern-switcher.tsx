@@ -4,6 +4,13 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { PATTERN_DEFINITIONS, getPatternDefinition } from "../lib/patterns";
 
+function trackPatternSelect(pattern: string) {
+  if (typeof window === "undefined") return;
+  const browserWindow = window as Window & { dataLayer?: Array<Record<string, unknown>> };
+  browserWindow.dataLayer = browserWindow.dataLayer ?? [];
+  browserWindow.dataLayer.push({ event: "pattern_select", pattern, source: "switcher" });
+}
+
 export function PatternSwitcher() {
   const searchParams = useSearchParams();
   const activePattern = getPatternDefinition(searchParams.get("pattern"));
@@ -18,6 +25,7 @@ export function PatternSwitcher() {
             href={pattern.href}
             className={`pattern-switcher-link ${isActive ? "is-active" : ""}`}
             aria-current={isActive ? "page" : undefined}
+            onClick={() => trackPatternSelect(pattern.key)}
           >
             {pattern.shortLabel}
           </Link>

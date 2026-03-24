@@ -10,6 +10,14 @@ import {
   type MeasureHistoryEntry,
 } from "../lib/measure-history";
 
+type StatsSummary = {
+  totalRuns: number;
+  bestBpm: number;
+  averageBpm: number;
+  bestConsistency: number;
+  averageAccuracy: number;
+};
+
 export default function StatsPage() {
   const [history, setHistory] = useState<MeasureHistoryEntry[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -29,25 +37,29 @@ export default function StatsPage() {
 
   const selectedRun = useMemo(() => history.find((entry) => entry.id === selectedId) ?? history[0] ?? null, [history, selectedId]);
 
-  const summary = useMemo(() => {
+  const summary = useMemo<StatsSummary>(() => {
     if (history.length === 0) {
       return {
         totalRuns: 0,
         bestBpm: 0,
         averageBpm: 0,
         bestConsistency: 0,
+        averageAccuracy: 0,
       };
     }
 
     const totalRuns = history.length;
     const bestBpm = Math.max(...history.map((entry) => entry.result.bpm));
     const averageBpm = Math.round(history.reduce((sum, entry) => sum + entry.result.bpm, 0) / totalRuns);
-    const best일정함 = Math.max(...history.map((entry) => entry.result.consistencyScore));
+    const bestConsistency = Math.max(...history.map((entry) => entry.result.consistencyScore));
+    const averageAccuracy = Math.round(history.reduce((sum, entry) => sum + entry.result.accuracy, 0) / totalRuns);
 
-    return { totalRuns, bestBpm, averageBpm, best일정함 };
+    return { totalRuns, bestBpm, averageBpm, bestConsistency, averageAccuracy };
   }, [history]);
 
-  async function downloadShareCard(entry: MeasureHistoryEntry) {
+  const recentTopRuns = useMemo(() => history.slice(0, 3), [history]);
+
+  async function downloadRunShareCard(entry: MeasureHistoryEntry) {
     const canvas = document.createElement("canvas");
     canvas.width = 1200;
     canvas.height = 1500;
@@ -55,25 +67,7 @@ export default function StatsPage() {
     if (!context) return;
 
     const { width, height } = canvas;
-    const gradient = context.createLinearGradient(0, 0, width, height);
-    gradient.addColorStop(0, "#07131a");
-    gradient.addColorStop(0.55, "#0c1f29");
-    gradient.addColorStop(1, "#123240");
-    context.fillStyle = gradient;
-    context.fillRect(0, 0, width, height);
-
-    context.fillStyle = "rgba(100, 245, 231, 0.12)";
-    context.beginPath();
-    context.arc(150, 180, 180, 0, Math.PI * 2);
-    context.fill();
-    context.beginPath();
-    context.arc(1020, 260, 220, 0, Math.PI * 2);
-    context.fill();
-
-    context.strokeStyle = "rgba(100, 245, 231, 0.18)";
-    context.lineWidth = 2;
-    roundRect(context, 64, 64, width - 128, height - 128, 36);
-    context.stroke();
+    paintBackground(context, width, height);
 
     context.fillStyle = "#64f5e7";
     context.font = "700 34px Arial";
@@ -105,11 +99,69 @@ export default function StatsPage() {
     context.fillText(`저장 시각 ${formatDateTime(entry.createdAt)}`, 110, 1350);
     context.fillText("트릴을 측정하고, 안정성을 확인하고, 최고 기록을 공유해보세요.", 110, 1402);
 
-    const link = document.createElement("a");
-    link.href = canvas.toDataURL("image/png");
-    link.download = `trill-lab-${entry.result.bpm}bpm.png`;
-    link.click();
-    setShareStatus("공유 이미지가 다운로드되었어요.");
+    downloadCanvas(canvas, `trill-lab-run-${entry.result.bpm}bpm.png`);
+    setShareStatus("선택한 기록 공유 이미지가 다운로드되었어요.");
+  }
+
+  async function downloadOverallShareCard() {
+    if (history.length === 0) return;
+
+    const canvas = document.createElement("canvas");
+    canvas.width = 1400;
+    canvas.height = 1600;
+    const context = canvas.getContext("2d");
+    if (!context) return;
+
+    const { width, height } = canvas;
+    paintBackground(context, width, height);
+
+    context.fillStyle = "#64f5e7";
+    context.font = "700 34px Arial";
+    context.fillText("TRILL LAB", 100, 130);
+
+    context.fillStyle = "#ecfeff";
+    context.font = "800 86px Arial";
+    context.fillText("전체 통계 요약", 100, 250);
+
+    context.fillStyle = "#9fb4bb";
+    context.font = "600 34px Arial";
+    context.fillText(`${summary.totalRuns}회 측정 · 평균 정확도 ${summary.averageAccuracy}%`, 102, 304);
+
+    drawMetric(context, { x: 100, y: 390, w: 270, h: 170, label: "총 측정 수", value: String(summary.totalRuns) });
+    drawMetric(context, { x: 390, y: 390, w: 270, h: 170, label: "최고 BPM", value: String(summary.bestBpm) });
+    drawMetric(context, { x: 680, y: 390, w: 270, h: 170, label: "평균 BPM", value: String(summary.averageBpm) });
+    drawMetric(context, { x: 970, y: 390, w: 330, h: 170, label: "최고 일정함", value: `${summary.bestConsistency}%` });
+
+    context.fillStyle = "rgba(236, 254, 255, 0.96)";
+    context.font = "700 40px Arial";
+    context.fillText("최근 기록", 100, 660);
+
+    recentTopRuns.forEach((entry, index) => {
+      const y = 710 + index * 200;
+      drawSummaryRow(context, {
+        x: 100,
+        y,
+        width: 1200,
+        title: `${index + 1}. ${entry.result.bpm} BPM`,
+        subtitle: `${getVariantLabel(entry.variant)} · ${entry.primaryKey} / ${entry.secondaryKey}`,
+        metaLeft: `정확도 ${formatPercent(entry.result.accuracy)} · 일정함 ${entry.result.consistencyScore}%`,
+        metaRight: formatDateTime(entry.createdAt),
+      });
+    });
+
+    context.fillStyle = "rgba(236, 254, 255, 0.96)";
+    context.font = "700 38px Arial";
+    context.fillText("대표 간격 프로필", 100, 1325);
+
+    const representativeIntervals = selectedRun?.result.intervals ?? history[0]?.result.intervals ?? [];
+    drawIntervals(context, representativeIntervals, 100, 1360, 1200, 150);
+
+    context.fillStyle = "#9fb4bb";
+    context.font = "600 28px Arial";
+    context.fillText("한 장으로 전체 성과를 공유할 수 있는 통계 카드예요.", 100, 1540);
+
+    downloadCanvas(canvas, `trill-lab-stats-summary.png`);
+    setShareStatus("전체 통계 공유 이미지가 다운로드되었어요.");
   }
 
   return (
@@ -140,9 +192,9 @@ export default function StatsPage() {
         <>
           <section className="stats-overview-grid page-section">
             <StatCard label="총 측정 수" value={String(summary.totalRuns)} />
-            <StatCard label="최고 BPM" value={`${summary.bestBpm}`} />
-            <StatCard label="평균 BPM" value={`${summary.averageBpm}`} />
-            <StatCard label="최고 일정함" value={`${summary.best일정함}%`} />
+            <StatCard label="최고 BPM" value={String(summary.bestBpm)} />
+            <StatCard label="평균 BPM" value={String(summary.averageBpm)} />
+            <StatCard label="최고 일정함" value={`${summary.bestConsistency}%`} />
           </section>
 
           <section className="stats-layout page-section">
@@ -161,7 +213,7 @@ export default function StatsPage() {
                         <span>{getVariantLabel(entry.variant)} · {entry.primaryKey} / {entry.secondaryKey}</span>
                       </div>
                       <div className="history-meta">
-                        <span>{entry.result.consistencyScore}%% 일정함</span>
+                        <span>일정함 {entry.result.consistencyScore}%</span>
                         <span>{formatDateTime(entry.createdAt)}</span>
                       </div>
                     </button>
@@ -197,9 +249,30 @@ export default function StatsPage() {
                   <StatCard label="최저 속도" value={formatMs(selectedRun.result.slowestIntervalMs)} compact />
                 </div>
 
+                <div className="share-card-preview">
+                  <div className="share-card-preview-header">
+                    <span className="brand-mark">TRILL LAB</span>
+                    <span>전체 통계 공유</span>
+                  </div>
+                  <div>
+                    <p className="section-label">전체 기록 요약</p>
+                    <h2 className="section-title">한 장으로 전체 성과 공유하기</h2>
+                    <p className="section-subtitle">총 측정 수, 최고/평균 BPM, 최고 일정함, 최근 기록까지 한 번에 담은 이미지를 만들어요.</p>
+                  </div>
+                  <div className="share-card-metrics">
+                    <StatCard label="총 측정 수" value={String(summary.totalRuns)} compact />
+                    <StatCard label="최고 BPM" value={String(summary.bestBpm)} compact />
+                    <StatCard label="평균 BPM" value={String(summary.averageBpm)} compact />
+                    <StatCard label="평균 정확도" value={`${summary.averageAccuracy}%`} compact />
+                  </div>
+                </div>
+
                 <div className="share-actions">
-                  <button type="button" className="primary-button" onClick={() => downloadShareCard(selectedRun)}>
-                    공유 이미지 다운로드
+                  <button type="button" className="primary-button" onClick={() => downloadRunShareCard(selectedRun)}>
+                    선택한 기록 이미지 다운로드
+                  </button>
+                  <button type="button" className="secondary-button" onClick={downloadOverallShareCard}>
+                    전체 통계 이미지 다운로드
                   </button>
                   {shareStatus ? <span className="hint-text">{shareStatus}</span> : null}
                 </div>
@@ -219,6 +292,35 @@ function StatCard({ label, value, compact = false }: { label: string; value: str
       <strong>{value}</strong>
     </div>
   );
+}
+
+function downloadCanvas(canvas: HTMLCanvasElement, filename: string) {
+  const link = document.createElement("a");
+  link.href = canvas.toDataURL("image/png");
+  link.download = filename;
+  link.click();
+}
+
+function paintBackground(context: CanvasRenderingContext2D, width: number, height: number) {
+  const gradient = context.createLinearGradient(0, 0, width, height);
+  gradient.addColorStop(0, "#07131a");
+  gradient.addColorStop(0.55, "#0c1f29");
+  gradient.addColorStop(1, "#123240");
+  context.fillStyle = gradient;
+  context.fillRect(0, 0, width, height);
+
+  context.fillStyle = "rgba(100, 245, 231, 0.12)";
+  context.beginPath();
+  context.arc(150, 180, 180, 0, Math.PI * 2);
+  context.fill();
+  context.beginPath();
+  context.arc(width - 220, 260, 220, 0, Math.PI * 2);
+  context.fill();
+
+  context.strokeStyle = "rgba(100, 245, 231, 0.18)";
+  context.lineWidth = 2;
+  roundRect(context, 64, 64, width - 128, height - 128, 36);
+  context.stroke();
 }
 
 function roundRect(context: CanvasRenderingContext2D, x: number, y: number, width: number, height: number, radius: number) {
@@ -252,6 +354,31 @@ function drawMetric(
   context.fillStyle = "#ecfeff";
   context.font = "800 54px Arial";
   context.fillText(value, x + 28, y + 122);
+}
+
+function drawSummaryRow(
+  context: CanvasRenderingContext2D,
+  params: { x: number; y: number; width: number; title: string; subtitle: string; metaLeft: string; metaRight: string },
+) {
+  const { x, y, width, title, subtitle, metaLeft, metaRight } = params;
+
+  context.fillStyle = "rgba(255, 255, 255, 0.05)";
+  roundRect(context, x, y, width, 150, 28);
+  context.fill();
+  context.strokeStyle = "rgba(100, 245, 231, 0.14)";
+  context.stroke();
+
+  context.fillStyle = "#ecfeff";
+  context.font = "800 46px Arial";
+  context.fillText(title, x + 32, y + 58);
+
+  context.fillStyle = "#9fb4bb";
+  context.font = "600 28px Arial";
+  context.fillText(subtitle, x + 32, y + 98);
+  context.fillText(metaLeft, x + 32, y + 128);
+
+  const rightWidth = context.measureText(metaRight).width;
+  context.fillText(metaRight, x + width - 32 - rightWidth, y + 128);
 }
 
 function drawIntervals(context: CanvasRenderingContext2D, intervals: number[], x: number, y: number, width: number, height: number) {

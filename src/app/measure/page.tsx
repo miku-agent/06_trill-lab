@@ -12,6 +12,11 @@ type Result = {
   invalidHits: number;
   accuracy: number;
   peakStreak: number;
+  averageIntervalMs: number | null;
+  fastestIntervalMs: number | null;
+  slowestIntervalMs: number | null;
+  consistencyScore: number;
+  intervals: number[];
 };
 
 type MeasurePreset = {
@@ -48,6 +53,22 @@ const MEASURE_PRESETS: MeasurePreset[] = [
 
 function formatPercent(value: number) {
   return `${Math.round(value)}%`;
+}
+
+function formatMs(value: number | null) {
+  if (value === null || Number.isNaN(value)) return "-";
+  return `${Math.round(value)} ms`;
+}
+
+function calculateConsistencyScore(intervals: number[]) {
+  if (intervals.length <= 1) return 100;
+
+  const average = intervals.reduce((sum, value) => sum + value, 0) / intervals.length;
+  if (average <= 0) return 100;
+
+  const variance = intervals.reduce((sum, value) => sum + (value - average) ** 2, 0) / intervals.length;
+  const standardDeviation = Math.sqrt(variance);
+  return Math.max(0, Math.round(100 - (standardDeviation / average) * 100));
 }
 
 function normalizeKey(value: string) {
@@ -117,6 +138,7 @@ export default function MeasurePage() {
   const validHitsRef = useRef(0);
   const invalidHitsRef = useRef(0);
   const peakStreakRef = useRef(0);
+  const acceptedTimestampsRef = useRef<number[]>([]);
   const activePadTimeoutRef = useRef<number | null>(null);
   const hitFeedbackTimeoutRef = useRef<number | null>(null);
 
@@ -171,6 +193,11 @@ export default function MeasurePage() {
     const totalHits = validHitsRef.current + invalidHitsRef.current;
     const accuracy = totalHits === 0 ? 0 : (validHitsRef.current / totalHits) * 100;
     const bpm = Math.round((validHitsRef.current / 4 / TEST_SECONDS) * 60);
+    const intervals = acceptedTimestampsRef.current.slice(1).map((timestamp, index) => timestamp - acceptedTimestampsRef.current[index]);
+    const averageIntervalMs = intervals.length > 0 ? intervals.reduce((sum, value) => sum + value, 0) / intervals.length : null;
+    const fastestIntervalMs = intervals.length > 0 ? Math.min(...intervals) : null;
+    const slowestIntervalMs = intervals.length > 0 ? Math.max(...intervals) : null;
+    const consistencyScore = calculateConsistencyScore(intervals);
 
     setResult({
       bpm,
@@ -178,6 +205,11 @@ export default function MeasurePage() {
       invalidHits: invalidHitsRef.current,
       accuracy,
       peakStreak: peakStreakRef.current,
+      averageIntervalMs,
+      fastestIntervalMs,
+      slowestIntervalMs,
+      consistencyScore,
+      intervals,
     });
   }, []);
 
@@ -199,6 +231,7 @@ export default function MeasurePage() {
     validHitsRef.current = 0;
     invalidHitsRef.current = 0;
     peakStreakRef.current = 0;
+    acceptedTimestampsRef.current = [];
   }, []);
 
   useEffect(() => {
@@ -280,6 +313,7 @@ export default function MeasurePage() {
         const target = pressedKey === configuredKeys[0] ? "primary" : "secondary";
         triggerPadFeedback(target);
         triggerHitFeedback("good");
+        acceptedTimestampsRef.current = [...acceptedTimestampsRef.current, performance.now()];
         setLastAcceptedKey(pressedKey);
         setValidHits((current) => {
           const next = current + 1;
@@ -457,14 +491,35 @@ export default function MeasurePage() {
             <Stat label="최대 스트릭" value={String(peakStreak)} />
           </article>
 
-          <article className="panel result-panel">
-            <p className="section-label">결과</p>
-            <h2 className="result-title">{result ? `${result.bpm} BPM` : "-"}</h2>
-            <p className="section-subtitle">
-              {result
-                ? `정확도 ${formatPercent(result.accuracy)} · 유효 ${result.validHits} · 무효 ${result.invalidHits} · 최대 스트릭 ${result.peakStreak}`
-                : "측정 전"}
-            </p>
+          <article className="panel result-panel stack-gap-lg">
+            <div>
+              <p className="section-label">결과</p>
+              <h2 className="result-title">{result ? `${result.bpm} BPM` : "-"}</h2>
+              <p className="section-subtitle">
+                {result
+                  ? `정확도 ${formatPercent(result.accuracy)} · 유효 ${result.validHits} · 무효 ${result.invalidHits} · 최대 스트릭 ${result.peakStreak}`
+                  : "측정 전"}
+              </p>
+            </div>
+
+            <div className="interval-stats-grid">
+              <Stat label="평균 간격" value={result ? formatMs(result.averageIntervalMs) : "-"} />
+              <Stat label="최고 속도" value={result ? formatMs(result.fastestIntervalMs) : "-"} />
+              <Stat label="최저 속도" value={result ? formatMs(result.slowestIntervalMs) : "-"} />
+              <Stat label="일정함" value={result ? `${result.consistencyScore}%` : "-"} />
+            </div>
+
+            <div className="interval-chart-wrap">
+              <p className="section-label">interval graph</p>
+              {result && result.intervals.length > 1 ? (
+                <>
+                  <IntervalChart intervals={result.intervals} />
+                  <p className="section-subtitle">선이 평평할수록 더 일정한 트릴이에요.</p>
+                </>
+              ) : (
+                <p className="section-subtitle">유효 입력이 더 쌓이면 간격 그래프가 표시돼요.</p>
+              )}
+            </div>
           </article>
         </aside>
       </section>
@@ -496,6 +551,47 @@ function RhythmPad({
     <div className={`rhythm-pad ${compact ? "is-compact" : ""} ${isActive ? "is-active" : ""}`}>
       <span className="rhythm-pad-label">{label}</span>
       <strong className="rhythm-pad-value">{value}</strong>
+    </div>
+  );
+}
+
+function IntervalChart({ intervals }: { intervals: number[] }) {
+  const width = 640;
+  const height = 220;
+  const padding = 18;
+  const min = Math.min(...intervals);
+  const max = Math.max(...intervals);
+  const range = Math.max(max - min, 1);
+
+  const points = intervals
+    .map((value, index) => {
+      const x = padding + (index / Math.max(intervals.length - 1, 1)) * (width - padding * 2);
+      const y = height - padding - ((value - min) / range) * (height - padding * 2);
+      return `${x},${y}`;
+    })
+    .join(" ");
+
+  const average = intervals.reduce((sum, value) => sum + value, 0) / intervals.length;
+  const averageY = height - padding - ((average - min) / range) * (height - padding * 2);
+
+  return (
+    <div className="interval-chart">
+      <svg viewBox={`0 0 ${width} ${height}`} className="interval-chart-svg" role="img" aria-label="Input interval chart">
+        <line x1={padding} y1={padding} x2={padding} y2={height - padding} className="chart-axis" />
+        <line x1={padding} y1={height - padding} x2={width - padding} y2={height - padding} className="chart-axis" />
+        <line x1={padding} y1={averageY} x2={width - padding} y2={averageY} className="chart-average-line" />
+        <polyline fill="none" points={points} className="chart-line" />
+        {intervals.map((value, index) => {
+          const x = padding + (index / Math.max(intervals.length - 1, 1)) * (width - padding * 2);
+          const y = height - padding - ((value - min) / range) * (height - padding * 2);
+          return <circle key={`${index}-${value}`} cx={x} cy={y} r="4" className="chart-point" />;
+        })}
+      </svg>
+      <div className="chart-meta">
+        <span>fast {Math.round(min)} ms</span>
+        <span>avg {Math.round(average)} ms</span>
+        <span>slow {Math.round(max)} ms</span>
+      </div>
     </div>
   );
 }

@@ -463,6 +463,62 @@ main {
   font-size: clamp(2rem, 4vw, 2.8rem);
 }
 
+.interval-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 10px;
+}
+
+.interval-chart-wrap {
+  display: grid;
+  gap: 10px;
+}
+
+.interval-chart {
+  display: grid;
+  gap: 10px;
+}
+
+.interval-chart-svg {
+  width: 100%;
+  height: auto;
+  display: block;
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.02));
+}
+
+.chart-axis {
+  stroke: rgba(159, 180, 187, 0.35);
+  stroke-width: 1.5;
+}
+
+.chart-average-line {
+  stroke: rgba(255, 255, 255, 0.24);
+  stroke-width: 1.5;
+  stroke-dasharray: 5 5;
+}
+
+.chart-line {
+  stroke: var(--accent-strong);
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.chart-point {
+  fill: var(--accent);
+}
+
+.chart-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  color: var(--muted);
+  font-size: 13px;
+}
+
 .simple-panel {
   min-height: 220px;
   display: grid;

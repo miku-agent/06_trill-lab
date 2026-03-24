@@ -1,0 +1,36 @@
+name: CD
+
+on:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: trill-lab-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+    env:
+      APP_DIR: /Users/bini/apps/06_trill-lab
+      PM2_APP_NAME: trill-lab
+      PORT: 23310
+      REPO_URL: https://github.com/miku-agent/06_trill-lab.git
+    steps:
+      - name: Checkout workflow repo
+        uses: actions/checkout@v5
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.30.3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Deploy with pm2
+        run: bash scripts/deploy.sh

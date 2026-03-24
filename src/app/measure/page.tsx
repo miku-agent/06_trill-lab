@@ -42,8 +42,8 @@ const MEASURE_PRESETS: MeasurePreset[] = [
 ];
 
 const DRURUK_PRESETS: MeasurePreset[] = [
-  { key: "left", title: "1234 모드", description: "A → S → ; → ' 순서로 입력해요.", defaultKeys: ["A", "S"] },
-  { key: "right", title: "4321 모드", description: "' → ; → S → A 순서로 입력해요.", defaultKeys: ["'", ";"] },
+  { key: "1234", title: "1234 모드", description: "A → S → ; → ' 순서로 입력해요.", defaultKeys: ["A", "S"] },
+  { key: "4321", title: "4321 모드", description: "' → ; → S → A 순서로 입력해요.", defaultKeys: ["'", ";"] },
 ];
 
 const PATTERN_MODES: Record<PatternKey, PatternMode> = {
@@ -143,7 +143,7 @@ function getDefaultKeys(pattern: PatternKey, variant: MeasureVariant, activePres
   }
 
   if (pattern === "druruk") {
-    return variant === "right"
+    return variant === "4321"
       ? (["'", ";", "S", "A"] as [string, string, string, string])
       : (["A", "S", ";", "'"] as [string, string, string, string]);
   }
@@ -178,7 +178,7 @@ function MeasurePageContent() {
   const pattern = getPatternDefinition(searchParams.get("pattern")).key;
   const mode = PATTERN_MODES[pattern];
 
-  const [measureVariant, setMeasureVariant] = useState<MeasureVariant>("both");
+  const [selectedVariant, setSelectedVariant] = useState<MeasureVariant>(pattern === "druruk" ? "1234" : "both");
   const [keys, setKeys] = useState<[string, string, string, string]>(["A", "L", "S", "K"]);
   const [keyCaptureTarget, setKeyCaptureTarget] = useState<KeyCaptureTarget>(null);
   const [sessionState, setSessionState] = useState<SessionState>("idle");
@@ -206,6 +206,14 @@ function MeasurePageContent() {
   const expectedIndexRef = useRef(0);
   const currentRunTimestampsRef = useRef<number[]>([]);
   const completedRunsRef = useRef<Array<{ durationMs: number; intervals: [number, number, number] }>>([]);
+
+  const measureVariant = useMemo<MeasureVariant>(() => {
+    if (pattern === "druruk") {
+      return selectedVariant === "4321" ? "4321" : "1234";
+    }
+    if (selectedVariant === "left" || selectedVariant === "right") return selectedVariant;
+    return "both";
+  }, [pattern, selectedVariant]);
 
   const activePreset = getPresetConfig(measureVariant, pattern);
   const configuredKeys = useMemo(() => keys.map((value) => normalizeKey(value)), [keys]);
@@ -514,7 +522,7 @@ function MeasurePageContent() {
 
   function applyPreset(variant: MeasureVariant) {
     const preset = getPresetConfig(variant, pattern);
-    setMeasureVariant(variant);
+    setSelectedVariant(variant);
     setKeys(getDefaultKeys(pattern, variant, preset));
     setKeyCaptureTarget(null);
     setSessionState("idle");

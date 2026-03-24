@@ -32,8 +32,9 @@ const FILTER_LINKS: Array<{ label: string; href: string }> = [
   { label: "전체", href: "/stats" },
   { label: "트릴", href: "/stats?pattern=trill" },
   { label: "연타", href: "/stats?pattern=yeonta" },
-  { label: "드르륵 1234", href: "/stats?pattern=druruk&variant=left" },
-  { label: "드르륵 4321", href: "/stats?pattern=druruk&variant=right" },
+  { label: "드르륵 전체", href: "/stats?pattern=druruk" },
+  { label: "드르륵 1234", href: "/stats?pattern=druruk&variant=1234" },
+  { label: "드르륵 4321", href: "/stats?pattern=druruk&variant=4321" },
 ];
 
 export default function StatsPage() {
@@ -69,7 +70,15 @@ function StatsPageContent() {
   const filteredHistory = useMemo(() => {
     return history.filter((entry) => {
       if (activePattern && entry.pattern !== activePattern) return false;
-      if (activeVariant && entry.variant !== activeVariant) return false;
+      if (activeVariant) {
+        if (activePattern === "druruk") {
+          if (activeVariant === "1234" && !(entry.variant === "1234" || entry.variant === "left")) return false;
+          if (activeVariant === "4321" && !(entry.variant === "4321" || entry.variant === "right")) return false;
+          if (activeVariant === "both") return false;
+        } else if (entry.variant !== activeVariant) {
+          return false;
+        }
+      }
       return true;
     });
   }, [activePattern, activeVariant, history]);
@@ -248,7 +257,7 @@ function StatsPageContent() {
       <section className="page-section compact-summary panel">
         <strong>쿼리 필터 지원</strong>
         <span className="compact-summary-divider">·</span>
-        <span>예: `/stats?pattern=druruk&variant=left`, `/stats?pattern=druruk&variant=right`</span>
+        <span>예: `/stats?pattern=druruk`, `/stats?pattern=druruk&variant=1234`, `/stats?pattern=druruk&variant=4321`</span>
       </section>
 
       <section className="page-section pattern-select-grid" aria-label="통계 필터 선택">
@@ -375,7 +384,7 @@ function StatCard({ label, value, compact = false }: { label: string; value: str
 }
 
 function isMeasureVariant(value: string | null): value is MeasureVariant {
-  return value === "left" || value === "right" || value === "both";
+  return value === "left" || value === "right" || value === "both" || value === "1234" || value === "4321";
 }
 
 function average(values: number[]) {

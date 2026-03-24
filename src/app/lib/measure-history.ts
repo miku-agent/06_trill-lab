@@ -1,6 +1,6 @@
 import type { PatternKey } from "./patterns";
 
-export type MeasureVariant = "left" | "right" | "both";
+export type MeasureVariant = "left" | "right" | "both" | "1234" | "4321";
 
 export type DrurukStats = {
   completedRuns: number;
@@ -105,7 +105,11 @@ export function formatDateTime(value: string) {
 }
 
 export function getVariantLabel(variant: MeasureVariant, pattern?: PatternKey) {
-  if (pattern === "druruk") return variant === "right" ? "4321 모드" : "1234 모드";
+  if (pattern === "druruk") {
+    if (variant === "4321" || variant === "right") return "4321 모드";
+    if (variant === "both") return "드르륵 전체";
+    return "1234 모드";
+  }
   if (pattern === "yeonta") return "연타 모드";
   if (variant === "left") return "왼손 모드";
   if (variant === "right") return "오른손 모드";

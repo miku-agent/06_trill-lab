@@ -33,6 +33,7 @@ type MeasurePreset = {
 
 const COUNTDOWN_SECONDS = 3;
 const TEST_SECONDS = 10;
+const FORBIDDEN_CAPTURE_KEYS = new Set(["ESC", "TAB", "ENTER", "CMD", "CTRL", "ALT", "SHIFT"]);
 
 const MODE_CARDS: ModeCard[] = [
   {
@@ -152,6 +153,7 @@ export default function HomePage() {
   const [currentStreak, setCurrentStreak] = useState(0);
   const [peakStreak, setPeakStreak] = useState(0);
   const [result, setResult] = useState<Result | null>(null);
+  const [captureError, setCaptureError] = useState<string | null>(null);
   const deadlineRef = useRef<number | null>(null);
   const runningRef = useRef(false);
   const validHitsRef = useRef(0);
@@ -174,6 +176,10 @@ export default function HomePage() {
         : "두 번째 키를 기다리는 중이에요. 아무 키나 눌러주세요. ESC로 취소할 수 있어요.";
     }
 
+    if (captureError) {
+      return captureError;
+    }
+
     if (!hasValidKeyConfig) {
       return "서로 다른 두 키를 설정해야 측정을 시작할 수 있어요.";
     }
@@ -191,7 +197,7 @@ export default function HomePage() {
     }
 
     return `${activePreset.title} 기준으로 ${configuredKeys[0]} / ${configuredKeys[1]} 키를 사용합니다. 10초 동안 한계 속도로 트릴을 쳐보세요.`;
-  }, [activePreset.title, configuredKeys, countdownLeft, hasValidKeyConfig, keyCaptureTarget, result, selectedMode, sessionState]);
+  }, [activePreset.title, captureError, configuredKeys, countdownLeft, hasValidKeyConfig, keyCaptureTarget, result, selectedMode, sessionState]);
 
   const finishRun = useCallback(() => {
     runningRef.current = false;
@@ -221,6 +227,7 @@ export default function HomePage() {
     setCurrentStreak(0);
     setPeakStreak(0);
     setResult(null);
+    setCaptureError(null);
     deadlineRef.current = null;
     runningRef.current = false;
     validHitsRef.current = 0;
@@ -267,10 +274,16 @@ export default function HomePage() {
         event.preventDefault();
         if (event.key === "Escape") {
           setKeyCaptureTarget(null);
+          setCaptureError(null);
           return;
         }
         const pressedKey = normalizeKeyboardEvent(event);
         if (!pressedKey) return;
+        if (FORBIDDEN_CAPTURE_KEYS.has(pressedKey)) {
+          setCaptureError(`${pressedKey} 키는 바인딩할 수 없어요. 다른 키를 눌러주세요.`);
+          return;
+        }
+        setCaptureError(null);
         if (keyCaptureTarget === "primary") setPrimaryKey(pressedKey);
         else setSecondaryKey(pressedKey);
         setKeyCaptureTarget(null);
@@ -350,6 +363,7 @@ export default function HomePage() {
     runningRef.current = false;
     deadlineRef.current = null;
     setSessionState("idle");
+    setCaptureError(null);
     setKeyCaptureTarget(target);
     resetStats();
   }
@@ -511,8 +525,8 @@ export default function HomePage() {
                         disabled={sessionState === "countdown" || sessionState === "running"}
                       />
                     </div>
-                    <p style={{ color: hasValidKeyConfig ? "var(--muted)" : "var(--danger)", marginBottom: 0, marginTop: 12 }}>
-                      {hasValidKeyConfig ? `현재 ${configuredKeys[0]} / ${configuredKeys[1]} 조합으로 측정해요.` : "서로 다른 두 키를 입력해야 측정을 시작할 수 있어요."}
+                    <p style={{ color: captureError ? "var(--danger)" : hasValidKeyConfig ? "var(--muted)" : "var(--danger)", marginBottom: 0, marginTop: 12 }}>
+                      {captureError ?? (hasValidKeyConfig ? `현재 ${configuredKeys[0]} / ${configuredKeys[1]} 조합으로 측정해요.` : "서로 다른 두 키를 입력해야 측정을 시작할 수 있어요.")}
                     </p>
                   </div>
                 </div>
@@ -674,7 +688,7 @@ function KeySettingCard({
         {isCapturing ? "아무 키나 눌러주세요..." : "키 변경하기"}
       </button>
       <span style={{ color: "var(--muted)", fontSize: 13 }}>
-        {isCapturing ? "다음 키 입력을 바로 이 슬롯에 저장해요. ESC로 취소할 수 있어요." : hint}
+        {isCapturing ? "다음 키 입력을 바로 이 슬롯에 저장해요. ESC로 취소할 수 있어요. ESC/TAB/ENTER/수정키는 사용할 수 없어요." : hint}
       </span>
     </div>
   );

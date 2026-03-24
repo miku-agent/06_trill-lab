@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   appendMeasureHistory,
   createMeasureHistoryEntry,
@@ -9,10 +10,10 @@ import {
   type MeasureResult as Result,
   type MeasureVariant,
 } from "../lib/measure-history";
+import { getPatternDefinition, type PatternKey } from "../lib/patterns";
 
 type SessionState = "idle" | "countdown" | "running" | "finished";
-type KeyCaptureTarget = "primary" | "secondary" | null;
-
+type KeyCaptureTarget = "key1" | "key2" | "key3" | "key4" | null;
 type MeasurePreset = {
   key: MeasureVariant;
   title: string;
@@ -20,37 +21,49 @@ type MeasurePreset = {
   defaultKeys: [string, string];
 };
 
+type PatternMode = {
+  key: PatternKey;
+  title: string;
+  description: string;
+  keyLabels: string[];
+  keyHints: string[];
+  sequence: (keys: string[]) => string[];
+};
+
 const COUNTDOWN_SECONDS = 3;
 const TEST_SECONDS = 10;
 const FORBIDDEN_CAPTURE_KEYS = new Set(["ESC", "TAB", "ENTER", "CMD", "CTRL", "ALT", "SHIFT"]);
+const CAPTURE_TARGETS: Exclude<KeyCaptureTarget, null>[] = ["key1", "key2", "key3", "key4"];
 
 const MEASURE_PRESETS: MeasurePreset[] = [
-  {
-    key: "left",
-    title: "왼손 모드",
-    description: "왼손 두 키로 한손 트릴을 측정해요.",
-    defaultKeys: ["A", "S"],
-  },
-  {
-    key: "right",
-    title: "오른손 모드",
-    description: "오른손 두 키로 한손 트릴을 측정해요.",
-    defaultKeys: ["K", "L"],
-  },
-  {
-    key: "both",
-    title: "양손 모드",
-    description: "좌/우 손 분리 키로 일반적인 교대 트릴을 측정해요.",
-    defaultKeys: ["A", "L"],
-  },
+  { key: "left", title: "왼손 모드", description: "왼손 두 키로 한손 트릴을 측정해요.", defaultKeys: ["A", "S"] },
+  { key: "right", title: "오른손 모드", description: "오른손 두 키로 한손 트릴을 측정해요.", defaultKeys: ["K", "L"] },
+  { key: "both", title: "양손 모드", description: "좌/우 손 분리 키로 일반적인 교대 트릴을 측정해요.", defaultKeys: ["A", "L"] },
 ];
 
-function calculate일정함Score(intervals: number[]) {
-  if (intervals.length <= 1) return 100;
+const PATTERN_MODES: Record<PatternKey, PatternMode> = {
+  trill: {
+    key: "trill",
+    title: "트릴 측정",
+    description: "두 키를 번갈아 눌러 BPM과 일정함을 측정해요.",
+    keyLabels: ["첫 번째 키", "두 번째 키"],
+    keyHints: ["예: A", "예: L"],
+    sequence: (keys) => [keys[0], keys[1]],
+  },
+  druruk: {
+    key: "druruk",
+    title: "드르륵 측정",
+    description: "1234 → 4321 순서로 4키를 왕복 입력하는 패턴을 측정해요.",
+    keyLabels: ["1번 키", "2번 키", "3번 키", "4번 키"],
+    keyHints: ["예: A", "예: S", "예: D", "예: F"],
+    sequence: (keys) => [keys[0], keys[1], keys[2], keys[3], keys[3], keys[2], keys[1], keys[0]],
+  },
+};
 
+function calculateConsistencyScore(intervals: number[]) {
+  if (intervals.length <= 1) return 100;
   const average = intervals.reduce((sum, value) => sum + value, 0) / intervals.length;
   if (average <= 0) return 100;
-
   const variance = intervals.reduce((sum, value) => sum + (value - average) ** 2, 0) / intervals.length;
   const standardDeviation = Math.sqrt(variance);
   return Math.max(0, Math.round(100 - (standardDeviation / average) * 100));
@@ -75,7 +88,6 @@ function normalizeKey(value: string) {
 
 function normalizeKeyboardEvent(event: KeyboardEvent) {
   const { code, key } = event;
-
   if (code.startsWith("Key")) return code.slice(3).toUpperCase();
   if (code.startsWith("Digit")) return code.slice(5);
   if (code === "Space") return "SPACE";
@@ -92,7 +104,6 @@ function normalizeKeyboardEvent(event: KeyboardEvent) {
   if (code === "Tab") return "TAB";
   if (code === "Backspace") return "BACKSPACE";
   if (code.startsWith("Numpad")) return code.replace("Numpad", "NUM ").toUpperCase();
-
   return normalizeKey(key);
 }
 
@@ -101,14 +112,24 @@ function getPresetConfig(variant: MeasureVariant) {
 }
 
 export default function MeasurePage() {
+  return (
+    <Suspense fallback={<main className="page-main measure-page" />}>
+      <MeasurePageContent />
+    </Suspense>
+  );
+}
+
+function MeasurePageContent() {
+  const searchParams = useSearchParams();
+  const pattern = getPatternDefinition(searchParams.get("pattern")).key;
+  const mode = PATTERN_MODES[pattern];
+
   const [measureVariant, setMeasureVariant] = useState<MeasureVariant>("both");
-  const [primaryKey, setPrimaryKey] = useState("A");
-  const [secondaryKey, setSecondaryKey] = useState("L");
+  const [keys, setKeys] = useState<[string, string, string, string]>(["A", "L", "S", "K"]);
   const [keyCaptureTarget, setKeyCaptureTarget] = useState<KeyCaptureTarget>(null);
   const [sessionState, setSessionState] = useState<SessionState>("idle");
   const [countdownLeft, setCountdownLeft] = useState(COUNTDOWN_SECONDS);
   const [timeLeft, setTimeLeft] = useState(TEST_SECONDS);
-  const [lastAcceptedKey, setLastAcceptedKey] = useState<string | null>(null);
   const [latestInput, setLatestInput] = useState<string>("-");
   const [validHits, setValidHits] = useState(0);
   const [invalidHits, setInvalidHits] = useState(0);
@@ -116,8 +137,10 @@ export default function MeasurePage() {
   const [peakStreak, setPeakStreak] = useState(0);
   const [result, setResult] = useState<Result | null>(null);
   const [captureError, setCaptureError] = useState<string | null>(null);
-  const [activePad, setActivePad] = useState<"primary" | "secondary" | null>(null);
+  const [activePadIndex, setActivePadIndex] = useState<number | null>(null);
   const [hitFeedback, setHitFeedback] = useState<"good" | "miss" | null>(null);
+  const [sequenceIndex, setSequenceIndex] = useState(0);
+
   const deadlineRef = useRef<number | null>(null);
   const runningRef = useRef(false);
   const validHitsRef = useRef(0);
@@ -126,43 +149,38 @@ export default function MeasurePage() {
   const acceptedTimestampsRef = useRef<number[]>([]);
   const activePadTimeoutRef = useRef<number | null>(null);
   const hitFeedbackTimeoutRef = useRef<number | null>(null);
+  const expectedIndexRef = useRef(0);
 
   const activePreset = getPresetConfig(measureVariant);
-  const configuredKeys = useMemo(() => [normalizeKey(primaryKey), normalizeKey(secondaryKey)], [primaryKey, secondaryKey]);
-  const hasValidKeyConfig = configuredKeys[0].length > 0 && configuredKeys[1].length > 0 && configuredKeys[0] !== configuredKeys[1];
+  const configuredKeys = useMemo(() => keys.map((value) => normalizeKey(value)), [keys]);
+  const activeKeys = pattern === "trill" ? configuredKeys.slice(0, 2) : configuredKeys;
+  const expectedSequence = useMemo(() => mode.sequence(activeKeys), [activeKeys, mode]);
+  const hasValidKeyConfig = useMemo(() => {
+    const unique = new Set(activeKeys.filter(Boolean));
+    return activeKeys.length === mode.keyLabels.length && unique.size === activeKeys.length;
+  }, [activeKeys, mode.keyLabels.length]);
 
   const helperText = useMemo(() => {
-    if (keyCaptureTarget) {
-      return keyCaptureTarget === "primary"
-        ? "첫 번째 키를 기다리는 중이에요. 아무 키나 눌러주세요. ESC로 취소할 수 있어요."
-        : "두 번째 키를 기다리는 중이에요. 아무 키나 눌러주세요. ESC로 취소할 수 있어요.";
-    }
-
+    if (keyCaptureTarget) return `${mode.keyLabels[CAPTURE_TARGETS.indexOf(keyCaptureTarget)]}를 기다리는 중이에요. 아무 키나 눌러주세요.`;
     if (captureError) return captureError;
-    if (!hasValidKeyConfig) return "서로 다른 두 키를 설정해야 측정을 시작할 수 있어요.";
-    if (sessionState === "countdown") return `준비... ${countdownLeft}초 후 측정 시작`;
-    if (sessionState === "running") return `${configuredKeys[0]} 와 ${configuredKeys[1]} 키만 사용해서 정확히 번갈아 누르세요.`;
-    if (result) return "같은 키 반복은 invalid 처리돼요. 정확도를 유지하면서 BPM을 끌어올리는 게 핵심이에요.";
-    return `${activePreset.title} 기준 · ${configuredKeys[0]} / ${configuredKeys[1]}`;
-  }, [activePreset.title, captureError, configuredKeys, countdownLeft, hasValidKeyConfig, keyCaptureTarget, result, sessionState]);
+    if (!hasValidKeyConfig) return "중복 없이 서로 다른 키를 설정해야 측정을 시작할 수 있어요.";
+    if (sessionState === "countdown") return `준비... ${countdownLeft}초 후 시작`;
+    if (sessionState === "running") return `현재 순서: ${expectedSequence[sequenceIndex] ?? expectedSequence[0]}`;
+    if (result) return pattern === "druruk" ? "1234 → 4321 순서를 유지할수록 더 높은 점수가 나와요." : "같은 키 반복은 invalid 처리돼요. 정확도를 유지하면서 BPM을 끌어올려보세요.";
+    return `${mode.title} · ${activeKeys.join(" / ")}`;
+  }, [captureError, countdownLeft, expectedSequence, hasValidKeyConfig, keyCaptureTarget, mode, pattern, result, sequenceIndex, sessionState, activeKeys]);
 
-  const triggerPadFeedback = useCallback((target: "primary" | "secondary") => {
-    if (activePadTimeoutRef.current) {
-      window.clearTimeout(activePadTimeoutRef.current);
-    }
-
-    setActivePad(target);
+  const triggerPadFeedback = useCallback((index: number) => {
+    if (activePadTimeoutRef.current) window.clearTimeout(activePadTimeoutRef.current);
+    setActivePadIndex(index);
     activePadTimeoutRef.current = window.setTimeout(() => {
-      setActivePad(null);
+      setActivePadIndex(null);
       activePadTimeoutRef.current = null;
     }, 120);
   }, []);
 
   const triggerHitFeedback = useCallback((type: "good" | "miss") => {
-    if (hitFeedbackTimeoutRef.current) {
-      window.clearTimeout(hitFeedbackTimeoutRef.current);
-    }
-
+    if (hitFeedbackTimeoutRef.current) window.clearTimeout(hitFeedbackTimeoutRef.current);
     setHitFeedback(type);
     hitFeedbackTimeoutRef.current = window.setTimeout(() => {
       setHitFeedback(null);
@@ -182,7 +200,7 @@ export default function MeasurePage() {
     const averageIntervalMs = intervals.length > 0 ? intervals.reduce((sum, value) => sum + value, 0) / intervals.length : null;
     const fastestIntervalMs = intervals.length > 0 ? Math.min(...intervals) : null;
     const slowestIntervalMs = intervals.length > 0 ? Math.max(...intervals) : null;
-    const consistencyScore = calculate일정함Score(intervals);
+    const consistencyScore = calculateConsistencyScore(intervals);
 
     setResult({
       bpm,
@@ -201,7 +219,6 @@ export default function MeasurePage() {
   const resetStats = useCallback(() => {
     setCountdownLeft(COUNTDOWN_SECONDS);
     setTimeLeft(TEST_SECONDS);
-    setLastAcceptedKey(null);
     setLatestInput("-");
     setValidHits(0);
     setInvalidHits(0);
@@ -209,8 +226,10 @@ export default function MeasurePage() {
     setPeakStreak(0);
     setResult(null);
     setCaptureError(null);
-    setActivePad(null);
+    setActivePadIndex(null);
     setHitFeedback(null);
+    setSequenceIndex(0);
+    expectedIndexRef.current = 0;
     deadlineRef.current = null;
     runningRef.current = false;
     validHitsRef.current = 0;
@@ -220,8 +239,23 @@ export default function MeasurePage() {
   }, []);
 
   useEffect(() => {
-    if (sessionState !== "countdown") return;
+    const nextKeys =
+      pattern === "druruk"
+        ? (["A", "S", "D", "F"] as [string, string, string, string])
+        : ([activePreset.defaultKeys[0], activePreset.defaultKeys[1], "S", "K"] as [string, string, string, string]);
 
+    const timer = window.setTimeout(() => {
+      setKeys(nextKeys);
+      setKeyCaptureTarget(null);
+      setSessionState("idle");
+      resetStats();
+    }, 0);
+
+    return () => window.clearTimeout(timer);
+  }, [activePreset.defaultKeys, pattern, resetStats]);
+
+  useEffect(() => {
+    if (sessionState !== "countdown") return;
     const timer = window.setTimeout(() => {
       if (countdownLeft <= 1) {
         setSessionState("running");
@@ -232,20 +266,16 @@ export default function MeasurePage() {
       }
       setCountdownLeft((current) => current - 1);
     }, 1000);
-
     return () => window.clearTimeout(timer);
   }, [countdownLeft, sessionState]);
 
-  useEffect(() => {
-    return () => {
-      if (activePadTimeoutRef.current) window.clearTimeout(activePadTimeoutRef.current);
-      if (hitFeedbackTimeoutRef.current) window.clearTimeout(hitFeedbackTimeoutRef.current);
-    };
+  useEffect(() => () => {
+    if (activePadTimeoutRef.current) window.clearTimeout(activePadTimeoutRef.current);
+    if (hitFeedbackTimeoutRef.current) window.clearTimeout(hitFeedbackTimeoutRef.current);
   }, []);
 
   useEffect(() => {
     if (sessionState !== "running") return;
-
     const interval = window.setInterval(() => {
       if (!deadlineRef.current) return;
       const remainingMs = deadlineRef.current - Date.now();
@@ -255,22 +285,20 @@ export default function MeasurePage() {
       }
       setTimeLeft(Number((remainingMs / 1000).toFixed(1)));
     }, 50);
-
     return () => window.clearInterval(interval);
   }, [finishRun, sessionState]);
 
   useEffect(() => {
-    if (!result || sessionState !== "finished") return;
-
+    if (!result || sessionState !== "finished" || pattern !== "trill") return;
     appendMeasureHistory(
       createMeasureHistoryEntry({
         variant: measureVariant,
-        primaryKey: configuredKeys[0],
-        secondaryKey: configuredKeys[1],
+        primaryKey: activeKeys[0],
+        secondaryKey: activeKeys[1],
         result,
       }),
     );
-  }, [configuredKeys, measureVariant, result, sessionState]);
+  }, [activeKeys, measureVariant, pattern, result, sessionState]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -281,20 +309,19 @@ export default function MeasurePage() {
           setCaptureError(null);
           return;
         }
-
         const pressedKey = normalizeKeyboardEvent(event);
         if (!pressedKey) return;
         if (FORBIDDEN_CAPTURE_KEYS.has(pressedKey)) {
           setCaptureError(`${pressedKey} 키는 바인딩할 수 없어요. 다른 키를 눌러주세요.`);
           return;
         }
-
         setCaptureError(null);
-        if (keyCaptureTarget === "primary") setPrimaryKey(pressedKey);
-        else setSecondaryKey(pressedKey);
+        setKeys((current) => {
+          const next = [...current] as [string, string, string, string];
+          next[CAPTURE_TARGETS.indexOf(keyCaptureTarget)] = pressedKey;
+          return next;
+        });
         setKeyCaptureTarget(null);
-        runningRef.current = false;
-        deadlineRef.current = null;
         setSessionState("idle");
         resetStats();
         return;
@@ -302,17 +329,19 @@ export default function MeasurePage() {
 
       const pressedKey = normalizeKeyboardEvent(event);
       if (!pressedKey) return;
-      if (!runningRef.current || !hasValidKeyConfig || !configuredKeys.includes(pressedKey)) return;
+      if (!runningRef.current || !hasValidKeyConfig || !activeKeys.includes(pressedKey)) return;
 
       event.preventDefault();
       setLatestInput(pressedKey);
+      const expectedKey = expectedSequence[expectedIndexRef.current % expectedSequence.length];
+      const padIndex = activeKeys.findIndex((key) => key === pressedKey);
 
-      if (lastAcceptedKey === null || lastAcceptedKey !== pressedKey) {
-        const target = pressedKey === configuredKeys[0] ? "primary" : "secondary";
-        triggerPadFeedback(target);
+      if (pressedKey === expectedKey) {
+        triggerPadFeedback(Math.max(padIndex, 0));
         triggerHitFeedback("good");
         acceptedTimestampsRef.current = [...acceptedTimestampsRef.current, performance.now()];
-        setLastAcceptedKey(pressedKey);
+        expectedIndexRef.current = (expectedIndexRef.current + 1) % expectedSequence.length;
+        setSequenceIndex(expectedIndexRef.current);
         setValidHits((current) => {
           const next = current + 1;
           validHitsRef.current = next;
@@ -341,7 +370,7 @@ export default function MeasurePage() {
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [configuredKeys, hasValidKeyConfig, keyCaptureTarget, lastAcceptedKey, resetStats, triggerHitFeedback, triggerPadFeedback]);
+  }, [activeKeys, expectedSequence, hasValidKeyConfig, keyCaptureTarget, resetStats, triggerHitFeedback, triggerPadFeedback]);
 
   function startRun() {
     if (!hasValidKeyConfig || keyCaptureTarget !== null) return;
@@ -352,18 +381,13 @@ export default function MeasurePage() {
   function applyPreset(variant: MeasureVariant) {
     const preset = getPresetConfig(variant);
     setMeasureVariant(variant);
-    setPrimaryKey(preset.defaultKeys[0]);
-    setSecondaryKey(preset.defaultKeys[1]);
+    setKeys((current) => [preset.defaultKeys[0], preset.defaultKeys[1], current[2], current[3]]);
     setKeyCaptureTarget(null);
-    runningRef.current = false;
-    deadlineRef.current = null;
     setSessionState("idle");
     resetStats();
   }
 
   function beginKeyCapture(target: Exclude<KeyCaptureTarget, null>) {
-    runningRef.current = false;
-    deadlineRef.current = null;
     setSessionState("idle");
     setCaptureError(null);
     setKeyCaptureTarget(target);
@@ -393,62 +417,69 @@ export default function MeasurePage() {
       ) : null}
 
       <section className="page-section compact-hero">
-        <h1 className="page-title">측정 모드</h1>
+        <h1 className="page-title">{mode.title}</h1>
         <div className="status-pill">{statusLabel}</div>
       </section>
 
       <section className="page-section compact-summary panel">
-        <strong>{activePreset.title}</strong>
+        <strong>{getPatternDefinition(pattern).label}</strong>
         <span className="compact-summary-divider">·</span>
-        <span>{configuredKeys[0]} / {configuredKeys[1]}</span>
+        <span>{activeKeys.join(" / ")}</span>
         <span className="compact-summary-divider">·</span>
         <span>{helperText}</span>
       </section>
 
       <section className="measure-grid">
         <article className="panel stack-gap-lg start-panel">
-          <div>
-            <p className="section-label">모드 선택</p>
-            <div className="preset-grid">
-              {MEASURE_PRESETS.map((preset) => {
-                const isActive = preset.key === measureVariant;
-                return (
-                  <button
-                    key={preset.key}
-                    onClick={() => applyPreset(preset.key)}
-                    disabled={sessionState === "countdown" || sessionState === "running"}
-                    className={`preset-card ${isActive ? "is-active" : ""}`}
-                  >
-                    <strong>{preset.title}</strong>
-                    <span>{preset.description}</span>
-                  </button>
-                );
-              })}
+          {pattern === "trill" ? (
+            <div>
+              <p className="section-label">모드 선택</p>
+              <div className="preset-grid">
+                {MEASURE_PRESETS.map((preset) => {
+                  const isActive = preset.key === measureVariant;
+                  return (
+                    <button
+                      key={preset.key}
+                      onClick={() => applyPreset(preset.key)}
+                      disabled={sessionState === "countdown" || sessionState === "running"}
+                      className={`preset-card ${isActive ? "is-active" : ""}`}
+                    >
+                      <strong>{preset.title}</strong>
+                      <span>{preset.description}</span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-          </div>
+          ) : (
+            <div>
+              <p className="section-label">패턴 안내</p>
+              <p className="section-subtitle">{mode.description}</p>
+              <div className="sequence-preview">
+                {expectedSequence.map((key, index) => (
+                  <span key={`${key}-${index}`} className="sequence-chip">{key}</span>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div>
-            <p className="section-label">키</p>
+            <p className="section-label">키 설정</p>
             <div className="key-grid">
-              <KeySettingCard
-                label="첫 번째 키"
-                value={primaryKey}
-                hint={measureVariant === "left" ? "예: A" : measureVariant === "right" ? "예: K" : "예: A"}
-                isCapturing={keyCaptureTarget === "primary"}
-                onStartCapture={() => beginKeyCapture("primary")}
-                disabled={sessionState === "countdown" || sessionState === "running"}
-              />
-              <KeySettingCard
-                label="두 번째 키"
-                value={secondaryKey}
-                hint={measureVariant === "left" ? "예: S" : measureVariant === "right" ? "예: L" : "예: L"}
-                isCapturing={keyCaptureTarget === "secondary"}
-                onStartCapture={() => beginKeyCapture("secondary")}
-                disabled={sessionState === "countdown" || sessionState === "running"}
-              />
+              {activeKeys.map((value, index) => (
+                <KeySettingCard
+                  key={`${mode.key}-${index}`}
+                  label={mode.keyLabels[index]}
+                  value={value}
+                  hint={mode.keyHints[index]}
+                  isCapturing={keyCaptureTarget === CAPTURE_TARGETS[index]}
+                  onStartCapture={() => beginKeyCapture(CAPTURE_TARGETS[index])}
+                  disabled={sessionState === "countdown" || sessionState === "running"}
+                />
+              ))}
             </div>
             <p className={`inline-note ${captureError || !hasValidKeyConfig ? "is-danger" : ""}`}>
-              {captureError ?? (hasValidKeyConfig ? `현재 ${configuredKeys[0]} / ${configuredKeys[1]} 조합으로 측정해요.` : "서로 다른 두 키를 입력해야 측정을 시작할 수 있어요.")}
+              {captureError ?? (hasValidKeyConfig ? `현재 ${activeKeys.join(" / ")} 조합으로 측정해요.` : "중복 없이 서로 다른 키를 설정해야 측정을 시작할 수 있어요.")}
             </p>
           </div>
 
@@ -475,10 +506,14 @@ export default function MeasurePage() {
                   {hitFeedback === "good" ? "성공" : hitFeedback === "miss" ? "실수" : "준비 완료"}
                 </span>
               </div>
-              <div className="pad-grid compact-pad-grid">
-                <RhythmPad label="왼쪽" value={configuredKeys[0]} isActive={activePad === "primary"} compact />
-                <RhythmPad label="오른쪽" value={configuredKeys[1]} isActive={activePad === "secondary"} compact />
+              <div className={`pad-grid compact-pad-grid ${pattern === "druruk" ? "is-four" : ""}`}>
+                {activeKeys.map((value, index) => (
+                  <RhythmPad key={`${value}-${index}`} label={mode.keyLabels[index]} value={value} isActive={activePadIndex === index} compact />
+                ))}
               </div>
+              {pattern === "druruk" ? (
+                <p className="section-subtitle">다음 입력: <strong>{expectedSequence[sequenceIndex] ?? expectedSequence[0]}</strong></p>
+              ) : null}
             </div>
           </article>
 
@@ -516,7 +551,7 @@ export default function MeasurePage() {
             {result && result.intervals.length > 1 ? (
               <>
                 <IntervalChart intervals={result.intervals} />
-                <p className="section-subtitle">선이 평평할수록 더 일정한 트릴이에요.</p>
+                <p className="section-subtitle">선이 평평할수록 더 일정한 패턴이에요.</p>
               </>
             ) : (
               <p className="section-subtitle">유효 입력이 더 쌓이면 간격 그래프가 표시돼요.</p>
@@ -537,17 +572,7 @@ function Stat({ label, value }: { label: string; value: string }) {
   );
 }
 
-function RhythmPad({
-  label,
-  value,
-  isActive,
-  compact = false,
-}: {
-  label: string;
-  value: string;
-  isActive: boolean;
-  compact?: boolean;
-}) {
+function RhythmPad({ label, value, isActive, compact = false }: { label: string; value: string; isActive: boolean; compact?: boolean }) {
   return (
     <div className={`rhythm-pad ${compact ? "is-compact" : ""} ${isActive ? "is-active" : ""}`}>
       <span className="rhythm-pad-label">{label}</span>
@@ -563,7 +588,6 @@ function IntervalChart({ intervals }: { intervals: number[] }) {
   const min = Math.min(...intervals);
   const max = Math.max(...intervals);
   const range = Math.max(max - min, 1);
-
   const points = intervals
     .map((value, index) => {
       const x = padding + (index / Math.max(intervals.length - 1, 1)) * (width - padding * 2);
@@ -571,7 +595,6 @@ function IntervalChart({ intervals }: { intervals: number[] }) {
       return `${x},${y}`;
     })
     .join(" ");
-
   const average = intervals.reduce((sum, value) => sum + value, 0) / intervals.length;
   const averageY = height - padding - ((average - min) / range) * (height - padding * 2);
 

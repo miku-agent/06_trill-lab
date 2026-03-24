@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { Suspense } from "react";
 import { HeaderNav } from "./components/header-nav";
+import { PatternSwitcher } from "./components/pattern-switcher";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -14,10 +16,15 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       <body>
         <header className="site-header">
           <div className="site-shell site-header-inner">
-            <Link href="/measure" className="brand">
-              <span className="brand-mark">TRILL LAB</span>
-              <strong>Trill practice studio</strong>
-            </Link>
+            <div className="site-header-brand-row">
+              <Link href="/" className="brand">
+                <span className="brand-mark">TRILL LAB</span>
+                <strong>Trill practice studio</strong>
+              </Link>
+              <Suspense fallback={null}>
+                <PatternSwitcher />
+              </Suspense>
+            </div>
             <HeaderNav />
           </div>
         </header>

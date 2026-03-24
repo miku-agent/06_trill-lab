@@ -4,10 +4,10 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const NAV_ITEMS = [
-  { href: "/measure", label: "Measure" },
-  { href: "/stats", label: "Stats" },
-  { href: "/challenge", label: "Challenge" },
-  { href: "/practice", label: "Practice" },
+  { href: "/measure", label: "측정" },
+  { href: "/stats", label: "통계" },
+  { href: "/challenge", label: "챌린지" },
+  { href: "/practice", label: "연습" },
 ];
 
 export function HeaderNav() {

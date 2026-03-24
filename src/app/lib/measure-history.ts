@@ -12,6 +12,12 @@ export type DrurukStats = {
   stepIntervals: number[];
 };
 
+export type YeontaStats = {
+  transitionIntervals: number[];
+  averageTransitionIntervalMs: number | null;
+  transitionIntervalStdDevMs: number | null;
+};
+
 export type MeasureResult = {
   bpm: number;
   validHits: number;
@@ -24,6 +30,7 @@ export type MeasureResult = {
   consistencyScore: number;
   intervals: number[];
   druruk?: DrurukStats;
+  yeonta?: YeontaStats;
 };
 
 export type MeasureHistoryEntry = {

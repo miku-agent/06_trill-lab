@@ -471,6 +471,16 @@ main {
   transition: opacity 120ms ease;
 }
 
+.rhythm-pad.is-expected {
+  border-color: rgba(100, 245, 231, 0.72);
+  box-shadow: inset 0 0 0 1px rgba(100, 245, 231, 0.22), 0 0 0 3px rgba(100, 245, 231, 0.08), 0 10px 32px rgba(57, 197, 187, 0.16);
+  background: linear-gradient(180deg, rgba(57, 197, 187, 0.12), rgba(255, 255, 255, 0.03));
+}
+
+.rhythm-pad.is-expected::after {
+  opacity: 0.75;
+}
+
 .rhythm-pad.is-active {
   transform: scale(1.03);
   border-color: rgba(100, 245, 231, 0.78);
@@ -485,6 +495,20 @@ main {
 .rhythm-pad-value {
   font-size: clamp(2.8rem, 8vw, 4.8rem);
   line-height: 1;
+}
+
+.rhythm-pad-target {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(100, 245, 231, 0.16);
+  border: 1px solid rgba(100, 245, 231, 0.4);
+  color: #a9fff6;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
 }
 
 .rhythm-pad.is-compact .rhythm-pad-value {

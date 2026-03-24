@@ -204,6 +204,7 @@ function MeasurePageContent() {
   const activePadTimeoutRef = useRef<number | null>(null);
   const hitFeedbackTimeoutRef = useRef<number | null>(null);
   const expectedIndexRef = useRef(0);
+  const acceptedStepIndicesRef = useRef<number[]>([]);
   const currentRunTimestampsRef = useRef<number[]>([]);
   const completedRunsRef = useRef<Array<{ durationMs: number; intervals: [number, number, number] }>>([]);
 
@@ -219,6 +220,10 @@ function MeasurePageContent() {
   const configuredKeys = useMemo(() => keys.map((value) => normalizeKey(value)), [keys]);
   const activeKeys = pattern === "trill" ? configuredKeys.slice(0, 2) : configuredKeys;
   const expectedSequence = useMemo(() => mode.sequence(activeKeys, measureVariant), [activeKeys, measureVariant, mode]);
+  const expectedPadIndex = useMemo(() => {
+    const nextKey = expectedSequence[sequenceIndex] ?? expectedSequence[0];
+    return activeKeys.findIndex((key) => key === nextKey);
+  }, [activeKeys, expectedSequence, sequenceIndex]);
   const hasValidKeyConfig = useMemo(() => {
     const unique = new Set(activeKeys.filter(Boolean));
     return activeKeys.length === mode.keyLabels.length && unique.size === activeKeys.length;
@@ -283,6 +288,21 @@ function MeasurePageContent() {
           stepIntervals,
         }
       : undefined;
+    const yeontaTransitionIntervals = pattern === "yeonta"
+      ? intervals.filter((_, index) => {
+          const previousStep = acceptedStepIndicesRef.current[index];
+          const currentStep = acceptedStepIndicesRef.current[index + 1];
+          if (previousStep === undefined || currentStep === undefined) return false;
+          return expectedSequence[previousStep] !== expectedSequence[currentStep];
+        })
+      : [];
+    const yeontaStats = pattern === "yeonta"
+      ? {
+          transitionIntervals: yeontaTransitionIntervals,
+          averageTransitionIntervalMs: calculateAverage(yeontaTransitionIntervals),
+          transitionIntervalStdDevMs: calculateStandardDeviation(yeontaTransitionIntervals),
+        }
+      : undefined;
 
     trackEvent("measure_finish", {
       pattern,
@@ -298,6 +318,8 @@ function MeasurePageContent() {
       run_stddev_ms: drurukStats?.runDurationStdDevMs ? Math.round(drurukStats.runDurationStdDevMs) : undefined,
       step_avg_ms: drurukStats?.averageStepIntervalMs ? Math.round(drurukStats.averageStepIntervalMs) : undefined,
       step_stddev_ms: drurukStats?.stepIntervalStdDevMs ? Math.round(drurukStats.stepIntervalStdDevMs) : undefined,
+      yeonta_transition_avg_ms: yeontaStats?.averageTransitionIntervalMs ? Math.round(yeontaStats.averageTransitionIntervalMs) : undefined,
+      yeonta_transition_stddev_ms: yeontaStats?.transitionIntervalStdDevMs ? Math.round(yeontaStats.transitionIntervalStdDevMs) : undefined,
     });
 
     setResult({
@@ -312,8 +334,9 @@ function MeasurePageContent() {
       consistencyScore,
       intervals,
       druruk: drurukStats,
+      yeonta: yeontaStats,
     });
-  }, [measureVariant, pattern, setResult, setSessionState]);
+  }, [expectedSequence, measureVariant, pattern, setResult, setSessionState]);
 
   const resetStats = useCallback(() => {
     setCountdownLeft(COUNTDOWN_SECONDS);
@@ -335,6 +358,7 @@ function MeasurePageContent() {
     invalidHitsRef.current = 0;
     peakStreakRef.current = 0;
     acceptedTimestampsRef.current = [];
+    acceptedStepIndicesRef.current = [];
     currentRunTimestampsRef.current = [];
     completedRunsRef.current = [];
   }, [
@@ -451,7 +475,9 @@ function MeasurePageContent() {
         triggerPadFeedback(Math.max(padIndex, 0));
         triggerHitFeedback("good");
         const timestamp = performance.now();
+        const expectedStepIndex = expectedIndexRef.current % expectedSequence.length;
         acceptedTimestampsRef.current = [...acceptedTimestampsRef.current, timestamp];
+        acceptedStepIndicesRef.current = [...acceptedStepIndicesRef.current, expectedStepIndex];
 
         if (pattern === "druruk") {
           const runTimestamps = [...currentRunTimestampsRef.current, timestamp];
@@ -662,7 +688,14 @@ function MeasurePageContent() {
               </div>
               <div className={`pad-grid compact-pad-grid ${pattern === "druruk" ? "is-four" : ""}`}>
                 {activeKeys.map((value, index) => (
-                  <RhythmPad key={`${value}-${index}`} label={mode.keyLabels[index]} value={value} isActive={activePadIndex === index} compact />
+                  <RhythmPad
+                    key={`${value}-${index}`}
+                    label={mode.keyLabels[index]}
+                    value={value}
+                    isActive={activePadIndex === index}
+                    isExpected={expectedPadIndex === index && sessionState !== "countdown"}
+                    compact
+                  />
                 ))}
               </div>
               {pattern === "druruk" ? (
@@ -696,7 +729,9 @@ function MeasurePageContent() {
               {result
                 ? pattern === "druruk"
                   ? `평균 드르륵 ${formatMs(result.druruk?.averageRunDurationMs ?? null)} · 단계 간격 표준편차 ${formatMs(result.druruk?.stepIntervalStdDevMs ?? null)} · 참고 BPM ${result.bpm}`
-                  : `정확도 ${formatPercent(result.accuracy)} · 유효 ${result.validHits} · 무효 ${result.invalidHits} · 최대 스트릭 ${result.peakStreak}`
+                  : pattern === "yeonta"
+                    ? `전환 딜레이 ${formatMs(result.yeonta?.averageTransitionIntervalMs ?? null)} · 정확도 ${formatPercent(result.accuracy)} · 최대 스트릭 ${result.peakStreak}`
+                    : `정확도 ${formatPercent(result.accuracy)} · 유효 ${result.validHits} · 무효 ${result.invalidHits} · 최대 스트릭 ${result.peakStreak}`
                 : "측정 전"}
             </p>
           </div>
@@ -711,6 +746,15 @@ function MeasurePageContent() {
                 <Stat label="단계 간격 표준편차" value={result ? formatMs(result.druruk?.stepIntervalStdDevMs ?? null) : "-"} />
                 <Stat label="참고 BPM" value={result ? String(result.bpm) : "-"} />
                 <Stat label="정확도" value={result ? formatPercent(result.accuracy) : "-"} />
+                <Stat label="일정함" value={result ? `${result.consistencyScore}%` : "-"} />
+              </>
+            ) : pattern === "yeonta" ? (
+              <>
+                <Stat label="평균 간격" value={result ? formatMs(result.averageIntervalMs) : "-"} />
+                <Stat label="전환 딜레이" value={result ? formatMs(result.yeonta?.averageTransitionIntervalMs ?? null) : "-"} />
+                <Stat label="전환 편차" value={result ? formatMs(result.yeonta?.transitionIntervalStdDevMs ?? null) : "-"} />
+                <Stat label="최고 속도" value={result ? formatMs(result.fastestIntervalMs) : "-"} />
+                <Stat label="최저 속도" value={result ? formatMs(result.slowestIntervalMs) : "-"} />
                 <Stat label="일정함" value={result ? `${result.consistencyScore}%` : "-"} />
               </>
             ) : (
@@ -749,11 +793,24 @@ function Stat({ label, value }: { label: string; value: string }) {
   );
 }
 
-function RhythmPad({ label, value, isActive, compact = false }: { label: string; value: string; isActive: boolean; compact?: boolean }) {
+function RhythmPad({
+  label,
+  value,
+  isActive,
+  isExpected = false,
+  compact = false,
+}: {
+  label: string;
+  value: string;
+  isActive: boolean;
+  isExpected?: boolean;
+  compact?: boolean;
+}) {
   return (
-    <div className={`rhythm-pad ${compact ? "is-compact" : ""} ${isActive ? "is-active" : ""}`}>
+    <div className={`rhythm-pad ${compact ? "is-compact" : ""} ${isExpected ? "is-expected" : ""} ${isActive ? "is-active" : ""}`}>
       <span className="rhythm-pad-label">{label}</span>
       <strong className="rhythm-pad-value">{value}</strong>
+      {isExpected ? <span className="rhythm-pad-target">NOW</span> : null}
     </div>
   );
 }

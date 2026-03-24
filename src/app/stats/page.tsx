@@ -26,6 +26,8 @@ type StatsSummary = {
   drurukDurationStdDevMs: number | null;
   averageDrurukStepIntervalMs: number | null;
   drurukStepIntervalStdDevMs: number | null;
+  averageYeontaTransitionMs: number | null;
+  yeontaTransitionStdDevMs: number | null;
 };
 
 const FILTER_LINKS: Array<{ label: string; href: string }> = [
@@ -106,6 +108,8 @@ function StatsPageContent() {
         drurukDurationStdDevMs: null,
         averageDrurukStepIntervalMs: null,
         drurukStepIntervalStdDevMs: null,
+        averageYeontaTransitionMs: null,
+        yeontaTransitionStdDevMs: null,
       };
     }
 
@@ -119,6 +123,7 @@ function StatsPageContent() {
     const runDurations = drurukEntries.flatMap((entry) => entry.result.druruk?.runDurations ?? []);
     const stepIntervals = drurukEntries.flatMap((entry) => entry.result.druruk?.stepIntervals ?? []);
     const completedDrurukRuns = drurukEntries.reduce((sum, entry) => sum + (entry.result.druruk?.completedRuns ?? 0), 0);
+    const yeontaTransitionIntervals = filteredHistory.flatMap((entry) => entry.result.yeonta?.transitionIntervals ?? []);
 
     return {
       totalRuns,
@@ -131,6 +136,8 @@ function StatsPageContent() {
       drurukDurationStdDevMs: standardDeviation(runDurations),
       averageDrurukStepIntervalMs: average(stepIntervals),
       drurukStepIntervalStdDevMs: standardDeviation(stepIntervals),
+      averageYeontaTransitionMs: average(yeontaTransitionIntervals),
+      yeontaTransitionStdDevMs: standardDeviation(yeontaTransitionIntervals),
     };
   }, [filteredHistory]);
 
@@ -434,6 +441,9 @@ function getShareMeta(entry: MeasureHistoryEntry) {
   if (entry.pattern === "druruk") {
     return `평균 드르륵 ${formatMs(entry.result.druruk?.averageRunDurationMs ?? null)} · 단계 편차 ${formatMs(entry.result.druruk?.stepIntervalStdDevMs ?? null)}`;
   }
+  if (entry.pattern === "yeonta") {
+    return `전환 딜레이 ${formatMs(entry.result.yeonta?.averageTransitionIntervalMs ?? null)} · 일정함 ${entry.result.consistencyScore}%`;
+  }
   return `정확도 ${formatPercent(entry.result.accuracy)} · 일정함 ${entry.result.consistencyScore}%`;
 }
 
@@ -448,6 +458,19 @@ function getRunMetricCards(entry: MeasureHistoryEntry) {
       { label: "참고 BPM", value: String(entry.result.bpm) },
       { label: "정확도", value: formatPercent(entry.result.accuracy) },
       { label: "일정함", value: `${entry.result.consistencyScore}%` },
+    ];
+  }
+
+  if (entry.pattern === "yeonta") {
+    return [
+      { label: "정확도", value: formatPercent(entry.result.accuracy) },
+      { label: "일정함", value: `${entry.result.consistencyScore}%` },
+      { label: "전환 딜레이", value: formatMs(entry.result.yeonta?.averageTransitionIntervalMs ?? null) },
+      { label: "전환 편차", value: formatMs(entry.result.yeonta?.transitionIntervalStdDevMs ?? null) },
+      { label: "최대 스트릭", value: String(entry.result.peakStreak) },
+      { label: "평균 간격", value: formatMs(entry.result.averageIntervalMs) },
+      { label: "유효 입력", value: String(entry.result.validHits) },
+      { label: "무효 입력", value: String(entry.result.invalidHits) },
     ];
   }
 
@@ -477,6 +500,17 @@ function getOverviewCards(summary: StatsSummary, activePattern: PatternKey | nul
     ];
   }
 
+  if (activePattern === "yeonta") {
+    return [
+      { label: "총 측정 수", value: String(summary.totalRuns) },
+      { label: "최고 BPM", value: String(summary.bestBpm) },
+      { label: "평균 BPM", value: String(summary.averageBpm) },
+      { label: "평균 전환 딜레이", value: formatMs(summary.averageYeontaTransitionMs) },
+      { label: "전환 편차", value: formatMs(summary.yeontaTransitionStdDevMs) },
+      { label: "최고 일정함", value: `${summary.bestConsistency}%` },
+    ];
+  }
+
   return [
     { label: "총 측정 수", value: String(summary.totalRuns) },
     { label: "최고 BPM", value: String(summary.bestBpm) },
@@ -495,6 +529,17 @@ function getSummaryMetricCards(summary: StatsSummary, activePattern: PatternKey 
       { label: "평균 단계 간격", value: formatMs(summary.averageDrurukStepIntervalMs) },
       { label: "단계 간격 편차", value: formatMs(summary.drurukStepIntervalStdDevMs) },
       { label: "평균 정확도", value: `${summary.averageAccuracy}%` },
+      { label: "최고 일정함", value: `${summary.bestConsistency}%` },
+    ];
+  }
+
+  if (activePattern === "yeonta") {
+    return [
+      { label: "총 측정 수", value: String(summary.totalRuns) },
+      { label: "최고 BPM", value: String(summary.bestBpm) },
+      { label: "평균 BPM", value: String(summary.averageBpm) },
+      { label: "평균 전환 딜레이", value: formatMs(summary.averageYeontaTransitionMs) },
+      { label: "전환 편차", value: formatMs(summary.yeontaTransitionStdDevMs) },
       { label: "최고 일정함", value: `${summary.bestConsistency}%` },
     ];
   }

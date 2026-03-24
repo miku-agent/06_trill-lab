@@ -408,8 +408,7 @@ export default function MeasurePage() {
       </section>
 
       <section className="measure-grid">
-        <article className="panel stack-gap-lg">
-
+        <article className="panel stack-gap-lg start-panel">
           <div>
             <p className="section-label">모드 선택</p>
             <div className="preset-grid">
@@ -455,16 +454,18 @@ export default function MeasurePage() {
             </p>
           </div>
 
-          <button
-            onClick={startRun}
-            disabled={sessionState === "countdown" || sessionState === "running" || !hasValidKeyConfig || keyCaptureTarget !== null}
-            className="primary-button"
-          >
-            {result ? "다시 측정하기" : "측정 시작"}
-          </button>
+          <div className="start-button-wrap">
+            <button
+              onClick={startRun}
+              disabled={sessionState === "countdown" || sessionState === "running" || !hasValidKeyConfig || keyCaptureTarget !== null}
+              className="primary-button primary-button-large"
+            >
+              {result ? "다시 측정하기" : "측정 시작"}
+            </button>
+          </div>
         </article>
 
-        <aside className="stack-gap-lg">
+        <aside className="stack-gap-lg meter-sidebar">
           <article className={`panel rhythm-panel ${hitFeedback === "miss" ? "is-miss" : ""}`}>
             <div className="rhythm-stage compact-rhythm-stage">
               <div className="combo-display compact-combo-display">
@@ -483,45 +484,47 @@ export default function MeasurePage() {
             </div>
           </article>
 
-          <article className="panel stat-grid">
+          <article className="panel stat-grid compact-stat-grid">
             <Stat label="마지막 입력" value={latestInput} />
             <Stat label="유효 입력" value={String(validHits)} />
             <Stat label="무효 입력" value={String(invalidHits)} />
             <Stat label="현재 스트릭" value={String(currentStreak)} />
             <Stat label="최대 스트릭" value={String(peakStreak)} />
           </article>
-
-          <article className="panel result-panel stack-gap-lg">
-            <div>
-              <p className="section-label">결과</p>
-              <h2 className="result-title">{result ? `${result.bpm} BPM` : "-"}</h2>
-              <p className="section-subtitle">
-                {result
-                  ? `정확도 ${formatPercent(result.accuracy)} · 유효 ${result.validHits} · 무효 ${result.invalidHits} · 최대 스트릭 ${result.peakStreak}`
-                  : "측정 전"}
-              </p>
-            </div>
-
-            <div className="interval-stats-grid">
-              <Stat label="평균 간격" value={result ? formatMs(result.averageIntervalMs) : "-"} />
-              <Stat label="최고 속도" value={result ? formatMs(result.fastestIntervalMs) : "-"} />
-              <Stat label="최저 속도" value={result ? formatMs(result.slowestIntervalMs) : "-"} />
-              <Stat label="일정함" value={result ? `${result.consistencyScore}%` : "-"} />
-            </div>
-
-            <div className="interval-chart-wrap">
-              <p className="section-label">interval graph</p>
-              {result && result.intervals.length > 1 ? (
-                <>
-                  <IntervalChart intervals={result.intervals} />
-                  <p className="section-subtitle">선이 평평할수록 더 일정한 트릴이에요.</p>
-                </>
-              ) : (
-                <p className="section-subtitle">유효 입력이 더 쌓이면 간격 그래프가 표시돼요.</p>
-              )}
-            </div>
-          </article>
         </aside>
+      </section>
+
+      <section className="page-section result-section">
+        <article className="panel result-panel stack-gap-lg">
+          <div>
+            <p className="section-label">결과</p>
+            <h2 className="result-title">{result ? `${result.bpm} BPM` : "-"}</h2>
+            <p className="section-subtitle">
+              {result
+                ? `정확도 ${formatPercent(result.accuracy)} · 유효 ${result.validHits} · 무효 ${result.invalidHits} · 최대 스트릭 ${result.peakStreak}`
+                : "측정 전"}
+            </p>
+          </div>
+
+          <div className="interval-stats-grid">
+            <Stat label="평균 간격" value={result ? formatMs(result.averageIntervalMs) : "-"} />
+            <Stat label="최고 속도" value={result ? formatMs(result.fastestIntervalMs) : "-"} />
+            <Stat label="최저 속도" value={result ? formatMs(result.slowestIntervalMs) : "-"} />
+            <Stat label="일정함" value={result ? `${result.consistencyScore}%` : "-"} />
+          </div>
+
+          <div className="interval-chart-wrap">
+            <p className="section-label">interval graph</p>
+            {result && result.intervals.length > 1 ? (
+              <>
+                <IntervalChart intervals={result.intervals} />
+                <p className="section-subtitle">선이 평평할수록 더 일정한 트릴이에요.</p>
+              </>
+            ) : (
+              <p className="section-subtitle">유효 입력이 더 쌓이면 간격 그래프가 표시돼요.</p>
+            )}
+          </div>
+        </article>
       </section>
     </main>
   );

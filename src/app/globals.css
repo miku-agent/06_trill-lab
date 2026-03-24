@@ -167,8 +167,21 @@ main {
 
 .measure-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
+  grid-template-columns: minmax(0, 1.15fr) minmax(320px, 0.85fr);
   gap: 14px;
+  margin-top: 14px;
+  align-items: stretch;
+}
+
+.start-panel {
+  height: 100%;
+}
+
+.meter-sidebar {
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+}
+
+.result-section {
   margin-top: 14px;
 }
 
@@ -199,6 +212,10 @@ main {
 
 .stat-grid {
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+}
+
+.compact-stat-grid {
+  align-content: start;
 }
 
 .preset-card,
@@ -265,6 +282,17 @@ main {
   color: #062127;
   padding: 14px 18px;
   margin-top: 4px;
+}
+
+.start-button-wrap {
+  margin-top: auto;
+  display: grid;
+}
+
+.primary-button-large {
+  width: 100%;
+  min-height: 92px;
+  font-size: 1.05rem;
 }
 
 .primary-button:disabled,

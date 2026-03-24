@@ -14,7 +14,7 @@ export function HeaderNav() {
   const pathname = usePathname();
 
   return (
-    <nav className="site-nav" aria-label="Primary navigation">
+    <nav className="site-nav" aria-label="주요 내비게이션">
       {NAV_ITEMS.map((item) => {
         const isActive = pathname === item.href;
         return (

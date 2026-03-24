@@ -42,9 +42,9 @@ export default function StatsPage() {
     const totalRuns = history.length;
     const bestBpm = Math.max(...history.map((entry) => entry.result.bpm));
     const averageBpm = Math.round(history.reduce((sum, entry) => sum + entry.result.bpm, 0) / totalRuns);
-    const bestConsistency = Math.max(...history.map((entry) => entry.result.consistencyScore));
+    const best일정함 = Math.max(...history.map((entry) => entry.result.consistencyScore));
 
-    return { totalRuns, bestBpm, averageBpm, bestConsistency };
+    return { totalRuns, bestBpm, averageBpm, best일정함 };
   }, [history]);
 
   async function downloadShareCard(entry: MeasureHistoryEntry) {
@@ -87,29 +87,29 @@ export default function StatsPage() {
     context.font = "600 42px Arial";
     context.fillText(`${getVariantLabel(entry.variant)} · ${entry.primaryKey} / ${entry.secondaryKey}`, 112, 372);
 
-    drawMetric(context, { x: 110, y: 460, w: 300, h: 180, label: "Accuracy", value: formatPercent(entry.result.accuracy) });
-    drawMetric(context, { x: 445, y: 460, w: 300, h: 180, label: "Consistency", value: `${entry.result.consistencyScore}%` });
-    drawMetric(context, { x: 780, y: 460, w: 300, h: 180, label: "Peak streak", value: String(entry.result.peakStreak) });
-    drawMetric(context, { x: 110, y: 674, w: 300, h: 180, label: "Avg interval", value: formatMs(entry.result.averageIntervalMs) });
-    drawMetric(context, { x: 445, y: 674, w: 300, h: 180, label: "Fastest", value: formatMs(entry.result.fastestIntervalMs) });
-    drawMetric(context, { x: 780, y: 674, w: 300, h: 180, label: "Slowest", value: formatMs(entry.result.slowestIntervalMs) });
+    drawMetric(context, { x: 110, y: 460, w: 300, h: 180, label: "정확도", value: formatPercent(entry.result.accuracy) });
+    drawMetric(context, { x: 445, y: 460, w: 300, h: 180, label: "일정함", value: `${entry.result.consistencyScore}%` });
+    drawMetric(context, { x: 780, y: 460, w: 300, h: 180, label: "최대 스트릭", value: String(entry.result.peakStreak) });
+    drawMetric(context, { x: 110, y: 674, w: 300, h: 180, label: "평균 간격", value: formatMs(entry.result.averageIntervalMs) });
+    drawMetric(context, { x: 445, y: 674, w: 300, h: 180, label: "최고 속도", value: formatMs(entry.result.fastestIntervalMs) });
+    drawMetric(context, { x: 780, y: 674, w: 300, h: 180, label: "최저 속도", value: formatMs(entry.result.slowestIntervalMs) });
 
     context.fillStyle = "rgba(236, 254, 255, 0.96)";
     context.font = "700 38px Arial";
-    context.fillText("Interval profile", 110, 972);
+    context.fillText("간격 프로필", 110, 972);
 
     drawIntervals(context, entry.result.intervals, 110, 1010, 970, 260);
 
     context.fillStyle = "#9fb4bb";
     context.font = "600 32px Arial";
-    context.fillText(`Saved ${formatDateTime(entry.createdAt)}`, 110, 1350);
-    context.fillText("Measure your trill. Track your control. Share your peak.", 110, 1402);
+    context.fillText(`저장 시각 ${formatDateTime(entry.createdAt)}`, 110, 1350);
+    context.fillText("트릴을 측정하고, 안정성을 확인하고, 최고 기록을 공유해보세요.", 110, 1402);
 
     const link = document.createElement("a");
     link.href = canvas.toDataURL("image/png");
     link.download = `trill-lab-${entry.result.bpm}bpm.png`;
     link.click();
-    setShareStatus("Share image downloaded.");
+    setShareStatus("공유 이미지가 다운로드되었어요.");
   }
 
   return (
@@ -117,39 +117,39 @@ export default function StatsPage() {
       <section className="page-section compact-hero">
         <div>
           <p className="eyebrow">STATS</p>
-          <h1 className="page-title">Your trill archive</h1>
+          <h1 className="page-title">내 트릴 기록</h1>
         </div>
-        <div className="status-pill">{history.length} RUNS</div>
+        <div className="status-pill">{history.length}회 측정</div>
       </section>
 
       <section className="page-section compact-summary panel">
-        <strong>Auto-saved history</strong>
+        <strong>자동 저장 기록</strong>
         <span className="compact-summary-divider">·</span>
-        <span>Every finished measure run is saved to your browser.</span>
+        <span>측정이 끝날 때마다 기록이 브라우저에 저장돼요.</span>
       </section>
 
       {history.length === 0 ? (
         <section className="page-section">
           <article className="panel simple-panel">
-            <p className="section-label">No data yet</p>
-            <h2 className="section-title">Finish your first measure run</h2>
-            <p className="section-subtitle">Once you complete a run in Measure mode, your history and share cards will appear here.</p>
+            <p className="section-label">아직 데이터가 없어요</p>
+            <h2 className="section-title">첫 번째 측정을 완료해보세요</h2>
+            <p className="section-subtitle">측정 모드에서 한 번 완료하면 여기서 기록과 공유 카드를 볼 수 있어요.</p>
           </article>
         </section>
       ) : (
         <>
           <section className="stats-overview-grid page-section">
-            <StatCard label="Total runs" value={String(summary.totalRuns)} />
-            <StatCard label="Best BPM" value={`${summary.bestBpm}`} />
-            <StatCard label="Average BPM" value={`${summary.averageBpm}`} />
-            <StatCard label="Best consistency" value={`${summary.bestConsistency}%`} />
+            <StatCard label="총 측정 수" value={String(summary.totalRuns)} />
+            <StatCard label="최고 BPM" value={`${summary.bestBpm}`} />
+            <StatCard label="평균 BPM" value={`${summary.averageBpm}`} />
+            <StatCard label="최고 일정함" value={`${summary.best일정함}%`} />
           </section>
 
           <section className="stats-layout page-section">
             <article className="panel stack-gap-lg">
               <div>
-                <p className="section-label">Recent runs</p>
-                <h2 className="section-title">Choose a run to inspect</h2>
+                <p className="section-label">최근 기록</p>
+                <h2 className="section-title">확인할 기록을 선택하세요</h2>
               </div>
               <div className="history-list">
                 {history.map((entry) => {
@@ -161,7 +161,7 @@ export default function StatsPage() {
                         <span>{getVariantLabel(entry.variant)} · {entry.primaryKey} / {entry.secondaryKey}</span>
                       </div>
                       <div className="history-meta">
-                        <span>{entry.result.consistencyScore}% consistency</span>
+                        <span>{entry.result.consistencyScore}%% 일정함</span>
                         <span>{formatDateTime(entry.createdAt)}</span>
                       </div>
                     </button>
@@ -178,28 +178,28 @@ export default function StatsPage() {
                     <span>{formatDateTime(selectedRun.createdAt)}</span>
                   </div>
                   <div>
-                    <p className="section-label">Selected run</p>
+                    <p className="section-label">선택한 기록</p>
                     <h2 className="share-bpm">{selectedRun.result.bpm} BPM</h2>
                     <p className="section-subtitle">{getVariantLabel(selectedRun.variant)} · {selectedRun.primaryKey} / {selectedRun.secondaryKey}</p>
                   </div>
                   <div className="share-card-metrics">
-                    <StatCard label="Accuracy" value={formatPercent(selectedRun.result.accuracy)} compact />
-                    <StatCard label="Consistency" value={`${selectedRun.result.consistencyScore}%`} compact />
-                    <StatCard label="Peak streak" value={String(selectedRun.result.peakStreak)} compact />
-                    <StatCard label="Avg interval" value={formatMs(selectedRun.result.averageIntervalMs)} compact />
+                    <StatCard label="정확도" value={formatPercent(selectedRun.result.accuracy)} compact />
+                    <StatCard label="일정함" value={`${selectedRun.result.consistencyScore}%`} compact />
+                    <StatCard label="최대 스트릭" value={String(selectedRun.result.peakStreak)} compact />
+                    <StatCard label="평균 간격" value={formatMs(selectedRun.result.averageIntervalMs)} compact />
                   </div>
                 </div>
 
                 <div className="interval-stats-grid">
-                  <StatCard label="Valid hits" value={String(selectedRun.result.validHits)} compact />
-                  <StatCard label="Invalid hits" value={String(selectedRun.result.invalidHits)} compact />
-                  <StatCard label="Fastest" value={formatMs(selectedRun.result.fastestIntervalMs)} compact />
-                  <StatCard label="Slowest" value={formatMs(selectedRun.result.slowestIntervalMs)} compact />
+                  <StatCard label="유효 입력" value={String(selectedRun.result.validHits)} compact />
+                  <StatCard label="무효 입력" value={String(selectedRun.result.invalidHits)} compact />
+                  <StatCard label="최고 속도" value={formatMs(selectedRun.result.fastestIntervalMs)} compact />
+                  <StatCard label="최저 속도" value={formatMs(selectedRun.result.slowestIntervalMs)} compact />
                 </div>
 
                 <div className="share-actions">
                   <button type="button" className="primary-button" onClick={() => downloadShareCard(selectedRun)}>
-                    Download share image
+                    공유 이미지 다운로드
                   </button>
                   {shareStatus ? <span className="hint-text">{shareStatus}</span> : null}
                 </div>

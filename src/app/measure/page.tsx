@@ -27,25 +27,25 @@ const FORBIDDEN_CAPTURE_KEYS = new Set(["ESC", "TAB", "ENTER", "CMD", "CTRL", "A
 const MEASURE_PRESETS: MeasurePreset[] = [
   {
     key: "left",
-    title: "Left hand",
-    description: "Measure one-hand trill speed with two left-hand keys.",
+    title: "왼손 모드",
+    description: "왼손 두 키로 한손 트릴을 측정해요.",
     defaultKeys: ["A", "S"],
   },
   {
     key: "right",
-    title: "Right hand",
-    description: "Measure one-hand trill speed with two right-hand keys.",
+    title: "오른손 모드",
+    description: "오른손 두 키로 한손 트릴을 측정해요.",
     defaultKeys: ["K", "L"],
   },
   {
     key: "both",
-    title: "Both hands",
-    description: "Measure alternating trill speed with split left/right hand keys.",
+    title: "양손 모드",
+    description: "좌/우 손 분리 키로 일반적인 교대 트릴을 측정해요.",
     defaultKeys: ["A", "L"],
   },
 ];
 
-function calculateConsistencyScore(intervals: number[]) {
+function calculate일정함Score(intervals: number[]) {
   if (intervals.length <= 1) return 100;
 
   const average = intervals.reduce((sum, value) => sum + value, 0) / intervals.length;
@@ -134,16 +134,16 @@ export default function MeasurePage() {
   const helperText = useMemo(() => {
     if (keyCaptureTarget) {
       return keyCaptureTarget === "primary"
-        ? "Waiting for the first key. Press any key to bind it. Press ESC to cancel."
-        : "Waiting for the second key. Press any key to bind it. Press ESC to cancel.";
+        ? "첫 번째 키를 기다리는 중이에요. 아무 키나 눌러주세요. ESC로 취소할 수 있어요."
+        : "두 번째 키를 기다리는 중이에요. 아무 키나 눌러주세요. ESC로 취소할 수 있어요.";
     }
 
     if (captureError) return captureError;
-    if (!hasValidKeyConfig) return "You need two different keys before you can start measuring.";
-    if (sessionState === "countdown") return `Starting in ${countdownLeft}...`;
-    if (sessionState === "running") return `Alternate only between ${configuredKeys[0]} and ${configuredKeys[1]} as cleanly as possible.`;
-    if (result) return "Repeating the same key counts as invalid. Keep your accuracy high while pushing the BPM.";
-    return `${activePreset.title} preset · ${configuredKeys[0]} / ${configuredKeys[1]}`;
+    if (!hasValidKeyConfig) return "서로 다른 두 키를 설정해야 측정을 시작할 수 있어요.";
+    if (sessionState === "countdown") return `준비... ${countdownLeft}초 후 측정 시작`;
+    if (sessionState === "running") return `${configuredKeys[0]} 와 ${configuredKeys[1]} 키만 사용해서 정확히 번갈아 누르세요.`;
+    if (result) return "같은 키 반복은 invalid 처리돼요. 정확도를 유지하면서 BPM을 끌어올리는 게 핵심이에요.";
+    return `${activePreset.title} 기준 · ${configuredKeys[0]} / ${configuredKeys[1]}`;
   }, [activePreset.title, captureError, configuredKeys, countdownLeft, hasValidKeyConfig, keyCaptureTarget, result, sessionState]);
 
   const triggerPadFeedback = useCallback((target: "primary" | "secondary") => {
@@ -182,7 +182,7 @@ export default function MeasurePage() {
     const averageIntervalMs = intervals.length > 0 ? intervals.reduce((sum, value) => sum + value, 0) / intervals.length : null;
     const fastestIntervalMs = intervals.length > 0 ? Math.min(...intervals) : null;
     const slowestIntervalMs = intervals.length > 0 ? Math.max(...intervals) : null;
-    const consistencyScore = calculateConsistencyScore(intervals);
+    const consistencyScore = calculate일정함Score(intervals);
 
     setResult({
       bpm,
@@ -285,7 +285,7 @@ export default function MeasurePage() {
         const pressedKey = normalizeKeyboardEvent(event);
         if (!pressedKey) return;
         if (FORBIDDEN_CAPTURE_KEYS.has(pressedKey)) {
-          setCaptureError(`${pressedKey} cannot be used for key binding. Press a different key.`);
+          setCaptureError(`${pressedKey} 키는 바인딩할 수 없어요. 다른 키를 눌러주세요.`);
           return;
         }
 
@@ -372,28 +372,28 @@ export default function MeasurePage() {
 
   const statusLabel =
     sessionState === "countdown"
-      ? `COUNTDOWN ${countdownLeft}`
+      ? `카운트다운 ${countdownLeft}`
       : sessionState === "running"
-        ? `RUNNING ${timeLeft.toFixed(1)}s`
+        ? `측정 중 ${timeLeft.toFixed(1)}초`
         : sessionState === "finished"
-          ? "FINISHED"
+          ? "측정 완료"
           : keyCaptureTarget
-            ? "CAPTURING"
-            : "READY";
+            ? "키 대기 중"
+            : "준비 완료";
 
   return (
     <main className="page-main measure-page">
       {sessionState === "countdown" ? (
         <div className="countdown-overlay" aria-live="assertive">
           <div className="countdown-overlay-inner">
-            <span className="countdown-caption">GET READY</span>
+            <span className="countdown-caption">준비</span>
             <strong className="countdown-value">{countdownLeft}</strong>
           </div>
         </div>
       ) : null}
 
       <section className="page-section compact-hero">
-        <h1 className="page-title">Measure mode</h1>
+        <h1 className="page-title">측정 모드</h1>
         <div className="status-pill">{statusLabel}</div>
       </section>
 
@@ -408,7 +408,7 @@ export default function MeasurePage() {
       <section className="measure-grid">
         <article className="panel stack-gap-lg start-panel">
           <div>
-            <p className="section-label">Mode</p>
+            <p className="section-label">모드 선택</p>
             <div className="preset-grid">
               {MEASURE_PRESETS.map((preset) => {
                 const isActive = preset.key === measureVariant;
@@ -428,27 +428,27 @@ export default function MeasurePage() {
           </div>
 
           <div>
-            <p className="section-label">Keys</p>
+            <p className="section-label">키</p>
             <div className="key-grid">
               <KeySettingCard
-                label="Primary key"
+                label="첫 번째 키"
                 value={primaryKey}
-                hint={measureVariant === "left" ? "Example: A" : measureVariant === "right" ? "Example: K" : "Example: A"}
+                hint={measureVariant === "left" ? "예: A" : measureVariant === "right" ? "예: K" : "예: A"}
                 isCapturing={keyCaptureTarget === "primary"}
                 onStartCapture={() => beginKeyCapture("primary")}
                 disabled={sessionState === "countdown" || sessionState === "running"}
               />
               <KeySettingCard
-                label="Secondary key"
+                label="두 번째 키"
                 value={secondaryKey}
-                hint={measureVariant === "left" ? "Example: S" : measureVariant === "right" ? "Example: L" : "Example: L"}
+                hint={measureVariant === "left" ? "예: S" : measureVariant === "right" ? "예: L" : "예: L"}
                 isCapturing={keyCaptureTarget === "secondary"}
                 onStartCapture={() => beginKeyCapture("secondary")}
                 disabled={sessionState === "countdown" || sessionState === "running"}
               />
             </div>
             <p className={`inline-note ${captureError || !hasValidKeyConfig ? "is-danger" : ""}`}>
-              {captureError ?? (hasValidKeyConfig ? `Current setup: ${configuredKeys[0]} / ${configuredKeys[1]}` : "You need two different keys before you can start.")}
+              {captureError ?? (hasValidKeyConfig ? `현재 ${configuredKeys[0]} / ${configuredKeys[1]} 조합으로 측정해요.` : "서로 다른 두 키를 입력해야 측정을 시작할 수 있어요.")}
             </p>
           </div>
 
@@ -458,7 +458,7 @@ export default function MeasurePage() {
               disabled={sessionState === "countdown" || sessionState === "running" || !hasValidKeyConfig || keyCaptureTarget !== null}
               className="primary-button primary-button-large"
             >
-              {result ? "Measure again" : "Start measure"}
+              {result ? "다시 측정하기" : "측정 시작"}
             </button>
           </div>
         </article>
@@ -468,26 +468,26 @@ export default function MeasurePage() {
             <div className="rhythm-stage compact-rhythm-stage">
               <div className="combo-display compact-combo-display">
                 <div>
-                  <span className="combo-label">STREAK</span>
+                  <span className="combo-label">스트릭</span>
                   <strong className="combo-value compact-combo-value">{currentStreak}</strong>
                 </div>
                 <span className={`hit-badge ${hitFeedback ? `is-${hitFeedback}` : ""}`}>
-                  {hitFeedback === "good" ? "GOOD" : hitFeedback === "miss" ? "MISS" : "READY"}
+                  {hitFeedback === "good" ? "성공" : hitFeedback === "miss" ? "실수" : "준비 완료"}
                 </span>
               </div>
               <div className="pad-grid compact-pad-grid">
-                <RhythmPad label="LEFT" value={configuredKeys[0]} isActive={activePad === "primary"} compact />
-                <RhythmPad label="RIGHT" value={configuredKeys[1]} isActive={activePad === "secondary"} compact />
+                <RhythmPad label="왼쪽" value={configuredKeys[0]} isActive={activePad === "primary"} compact />
+                <RhythmPad label="오른쪽" value={configuredKeys[1]} isActive={activePad === "secondary"} compact />
               </div>
             </div>
           </article>
 
           <article className="panel stat-grid compact-stat-grid">
-            <Stat label="Latest input" value={latestInput} />
-            <Stat label="Valid hits" value={String(validHits)} />
-            <Stat label="Invalid hits" value={String(invalidHits)} />
-            <Stat label="Current streak" value={String(currentStreak)} />
-            <Stat label="Peak streak" value={String(peakStreak)} />
+            <Stat label="마지막 입력" value={latestInput} />
+            <Stat label="유효 입력" value={String(validHits)} />
+            <Stat label="무효 입력" value={String(invalidHits)} />
+            <Stat label="현재 스트릭" value={String(currentStreak)} />
+            <Stat label="최대 스트릭" value={String(peakStreak)} />
           </article>
         </aside>
       </section>
@@ -495,31 +495,31 @@ export default function MeasurePage() {
       <section className="page-section result-section">
         <article className="panel result-panel stack-gap-lg">
           <div>
-            <p className="section-label">Result</p>
+            <p className="section-label">결과</p>
             <h2 className="result-title">{result ? `${result.bpm} BPM` : "-"}</h2>
             <p className="section-subtitle">
               {result
-                ? `Accuracy ${formatPercent(result.accuracy)} · Valid ${result.validHits} · Invalid ${result.invalidHits} · Peak streak ${result.peakStreak}`
-                : "No result yet"}
+                ? `정확도 ${formatPercent(result.accuracy)} · 유효 ${result.validHits} · 무효 ${result.invalidHits} · 최대 스트릭 ${result.peakStreak}`
+                : "측정 전"}
             </p>
           </div>
 
           <div className="interval-stats-grid">
-            <Stat label="Avg interval" value={result ? formatMs(result.averageIntervalMs) : "-"} />
-            <Stat label="Fastest" value={result ? formatMs(result.fastestIntervalMs) : "-"} />
-            <Stat label="Slowest" value={result ? formatMs(result.slowestIntervalMs) : "-"} />
-            <Stat label="Consistency" value={result ? `${result.consistencyScore}%` : "-"} />
+            <Stat label="평균 간격" value={result ? formatMs(result.averageIntervalMs) : "-"} />
+            <Stat label="최고 속도" value={result ? formatMs(result.fastestIntervalMs) : "-"} />
+            <Stat label="최저 속도" value={result ? formatMs(result.slowestIntervalMs) : "-"} />
+            <Stat label="일정함" value={result ? `${result.consistencyScore}%` : "-"} />
           </div>
 
           <div className="interval-chart-wrap">
-            <p className="section-label">interval graph</p>
+            <p className="section-label">간격 그래프</p>
             {result && result.intervals.length > 1 ? (
               <>
                 <IntervalChart intervals={result.intervals} />
-                <p className="section-subtitle">A flatter line means a more consistent trill.</p>
+                <p className="section-subtitle">선이 평평할수록 더 일정한 트릴이에요.</p>
               </>
             ) : (
-              <p className="section-subtitle">Complete more valid hits to generate the interval graph.</p>
+              <p className="section-subtitle">유효 입력이 더 쌓이면 간격 그래프가 표시돼요.</p>
             )}
           </div>
         </article>
@@ -577,7 +577,7 @@ function IntervalChart({ intervals }: { intervals: number[] }) {
 
   return (
     <div className="interval-chart">
-      <svg viewBox={`0 0 ${width} ${height}`} className="interval-chart-svg" role="img" aria-label="Input interval chart">
+      <svg viewBox={`0 0 ${width} ${height}`} className="interval-chart-svg" role="img" aria-label="입력 간격 그래프">
         <line x1={padding} y1={padding} x2={padding} y2={height - padding} className="chart-axis" />
         <line x1={padding} y1={height - padding} x2={width - padding} y2={height - padding} className="chart-axis" />
         <line x1={padding} y1={averageY} x2={width - padding} y2={averageY} className="chart-average-line" />
@@ -589,9 +589,9 @@ function IntervalChart({ intervals }: { intervals: number[] }) {
         })}
       </svg>
       <div className="chart-meta">
-        <span>fast {Math.round(min)} ms</span>
-        <span>avg {Math.round(average)} ms</span>
-        <span>slow {Math.round(max)} ms</span>
+        <span>최고 속도 {Math.round(min)} ms</span>
+        <span>평균 {Math.round(average)} ms</span>
+        <span>최저 속도 {Math.round(max)} ms</span>
       </div>
     </div>
   );
@@ -617,10 +617,10 @@ function KeySettingCard({
       <span className="key-label">{label}</span>
       <div className="key-value">{normalizeKey(value) || "-"}</div>
       <button type="button" onClick={onStartCapture} disabled={disabled} className="secondary-button">
-        {isCapturing ? "Press any key..." : "Change key"}
+        {isCapturing ? "아무 키나 눌러주세요..." : "키 변경하기"}
       </button>
       <span className="hint-text">
-        {isCapturing ? "The next key press will bind immediately. Press ESC to cancel. ESC/TAB/ENTER/modifier keys are not allowed." : hint}
+        {isCapturing ? "다음 키 입력을 바로 이 슬롯에 저장해요. ESC로 취소할 수 있어요. ESC/TAB/ENTER/수정키는 사용할 수 없어요." : hint}
       </span>
     </div>
   );

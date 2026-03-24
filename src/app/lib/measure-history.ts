@@ -83,7 +83,7 @@ export function formatDateTime(value: string) {
 }
 
 export function getVariantLabel(variant: MeasureVariant) {
-  if (variant === "left") return "Left hand";
-  if (variant === "right") return "Right hand";
-  return "Both hands";
+  if (variant === "left") return "왼손 모드";
+  if (variant === "right") return "오른손 모드";
+  return "양손 모드";
 }

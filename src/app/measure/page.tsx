@@ -110,11 +110,15 @@ export default function MeasurePage() {
   const [peakStreak, setPeakStreak] = useState(0);
   const [result, setResult] = useState<Result | null>(null);
   const [captureError, setCaptureError] = useState<string | null>(null);
+  const [activePad, setActivePad] = useState<"primary" | "secondary" | null>(null);
+  const [hitFeedback, setHitFeedback] = useState<"good" | "miss" | null>(null);
   const deadlineRef = useRef<number | null>(null);
   const runningRef = useRef(false);
   const validHitsRef = useRef(0);
   const invalidHitsRef = useRef(0);
   const peakStreakRef = useRef(0);
+  const activePadTimeoutRef = useRef<number | null>(null);
+  const hitFeedbackTimeoutRef = useRef<number | null>(null);
 
   const activePreset = getPresetConfig(measureVariant);
   const configuredKeys = useMemo(() => [normalizeKey(primaryKey), normalizeKey(secondaryKey)], [primaryKey, secondaryKey]);
@@ -134,6 +138,30 @@ export default function MeasurePage() {
     if (result) return "같은 키 반복은 invalid 처리돼요. 정확도를 유지하면서 BPM을 끌어올리는 게 핵심이에요.";
     return `${activePreset.title} 기준 · ${configuredKeys[0]} / ${configuredKeys[1]}`;
   }, [activePreset.title, captureError, configuredKeys, countdownLeft, hasValidKeyConfig, keyCaptureTarget, result, sessionState]);
+
+  const triggerPadFeedback = useCallback((target: "primary" | "secondary") => {
+    if (activePadTimeoutRef.current) {
+      window.clearTimeout(activePadTimeoutRef.current);
+    }
+
+    setActivePad(target);
+    activePadTimeoutRef.current = window.setTimeout(() => {
+      setActivePad(null);
+      activePadTimeoutRef.current = null;
+    }, 120);
+  }, []);
+
+  const triggerHitFeedback = useCallback((type: "good" | "miss") => {
+    if (hitFeedbackTimeoutRef.current) {
+      window.clearTimeout(hitFeedbackTimeoutRef.current);
+    }
+
+    setHitFeedback(type);
+    hitFeedbackTimeoutRef.current = window.setTimeout(() => {
+      setHitFeedback(null);
+      hitFeedbackTimeoutRef.current = null;
+    }, 180);
+  }, []);
 
   const finishRun = useCallback(() => {
     runningRef.current = false;
@@ -164,6 +192,8 @@ export default function MeasurePage() {
     setPeakStreak(0);
     setResult(null);
     setCaptureError(null);
+    setActivePad(null);
+    setHitFeedback(null);
     deadlineRef.current = null;
     runningRef.current = false;
     validHitsRef.current = 0;
@@ -187,6 +217,13 @@ export default function MeasurePage() {
 
     return () => window.clearTimeout(timer);
   }, [countdownLeft, sessionState]);
+
+  useEffect(() => {
+    return () => {
+      if (activePadTimeoutRef.current) window.clearTimeout(activePadTimeoutRef.current);
+      if (hitFeedbackTimeoutRef.current) window.clearTimeout(hitFeedbackTimeoutRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     if (sessionState !== "running") return;
@@ -240,6 +277,9 @@ export default function MeasurePage() {
       setLatestInput(pressedKey);
 
       if (lastAcceptedKey === null || lastAcceptedKey !== pressedKey) {
+        const target = pressedKey === configuredKeys[0] ? "primary" : "secondary";
+        triggerPadFeedback(target);
+        triggerHitFeedback("good");
         setLastAcceptedKey(pressedKey);
         setValidHits((current) => {
           const next = current + 1;
@@ -258,6 +298,7 @@ export default function MeasurePage() {
         return;
       }
 
+      triggerHitFeedback("miss");
       setInvalidHits((current) => {
         const next = current + 1;
         invalidHitsRef.current = next;
@@ -268,7 +309,7 @@ export default function MeasurePage() {
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [configuredKeys, hasValidKeyConfig, keyCaptureTarget, lastAcceptedKey, resetStats]);
+  }, [configuredKeys, hasValidKeyConfig, keyCaptureTarget, lastAcceptedKey, resetStats, triggerHitFeedback, triggerPadFeedback]);
 
   function startRun() {
     if (!hasValidKeyConfig || keyCaptureTarget !== null) return;
@@ -381,6 +422,22 @@ export default function MeasurePage() {
         </article>
 
         <aside className="stack-gap-lg">
+          <article className={`panel rhythm-panel ${hitFeedback === "miss" ? "is-miss" : ""}`}>
+            <div className="rhythm-stage">
+              <div className="combo-display">
+                <span className="combo-label">STREAK</span>
+                <strong className="combo-value">{currentStreak}</strong>
+                <span className={`hit-badge ${hitFeedback ? `is-${hitFeedback}` : ""}`}>
+                  {hitFeedback === "good" ? "GOOD" : hitFeedback === "miss" ? "MISS" : "READY"}
+                </span>
+              </div>
+              <div className="pad-grid">
+                <RhythmPad label="LEFT" value={configuredKeys[0]} isActive={activePad === "primary"} />
+                <RhythmPad label="RIGHT" value={configuredKeys[1]} isActive={activePad === "secondary"} />
+              </div>
+            </div>
+          </article>
+
           <article className="panel stat-grid">
             <Stat label="마지막 입력" value={latestInput} />
             <Stat label="유효 입력" value={String(validHits)} />
@@ -409,6 +466,15 @@ function Stat({ label, value }: { label: string; value: string }) {
     <div className="stat-card">
       <span>{label}</span>
       <strong>{value}</strong>
+    </div>
+  );
+}
+
+function RhythmPad({ label, value, isActive }: { label: string; value: string; isActive: boolean }) {
+  return (
+    <div className={`rhythm-pad ${isActive ? "is-active" : ""}`}>
+      <span className="rhythm-pad-label">{label}</span>
+      <strong className="rhythm-pad-value">{value}</strong>
     </div>
   );
 }

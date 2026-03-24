@@ -296,6 +296,109 @@ main {
   padding: 10px 14px;
 }
 
+.rhythm-panel {
+  overflow: hidden;
+}
+
+.rhythm-panel.is-miss {
+  border-color: rgba(255, 122, 144, 0.6);
+  box-shadow: 0 0 0 1px rgba(255, 122, 144, 0.18), 0 20px 80px rgba(0, 0, 0, 0.24);
+}
+
+.rhythm-stage {
+  display: grid;
+  gap: 18px;
+}
+
+.combo-display {
+  display: flex;
+  align-items: end;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.combo-label,
+.rhythm-pad-label {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.combo-value {
+  font-size: clamp(3rem, 8vw, 5rem);
+  line-height: 0.95;
+}
+
+.hit-badge {
+  min-width: 78px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--muted);
+  font-weight: 800;
+  text-align: center;
+}
+
+.hit-badge.is-good {
+  color: #062127;
+  background: linear-gradient(135deg, var(--accent), var(--accent-strong));
+  border-color: transparent;
+}
+
+.hit-badge.is-miss {
+  color: white;
+  background: linear-gradient(135deg, #ff6a84, #ff8aa1);
+  border-color: transparent;
+}
+
+.pad-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.rhythm-pad {
+  position: relative;
+  overflow: hidden;
+  min-height: 180px;
+  display: grid;
+  align-content: space-between;
+  padding: 18px;
+  border-radius: 22px;
+  border: 1px solid var(--line);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02));
+  transition: transform 120ms ease, border-color 120ms ease, box-shadow 120ms ease, background 120ms ease;
+}
+
+.rhythm-pad::after {
+  content: "";
+  position: absolute;
+  inset: auto -10% -30% -10%;
+  height: 70%;
+  background: radial-gradient(circle, rgba(100, 245, 231, 0.24), transparent 70%);
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.rhythm-pad.is-active {
+  transform: scale(1.03);
+  border-color: rgba(100, 245, 231, 0.78);
+  box-shadow: 0 0 0 1px rgba(100, 245, 231, 0.18), 0 12px 40px rgba(57, 197, 187, 0.22);
+  background: linear-gradient(180deg, rgba(57, 197, 187, 0.18), rgba(255, 255, 255, 0.03));
+}
+
+.rhythm-pad.is-active::after {
+  opacity: 1;
+}
+
+.rhythm-pad-value {
+  font-size: clamp(2.8rem, 8vw, 4.8rem);
+  line-height: 1;
+}
+
 .simple-panel {
   min-height: 220px;
   display: grid;
@@ -321,5 +424,9 @@ main {
   .site-nav-link {
     flex: 1 1 auto;
     text-align: center;
+  }
+
+  .pad-grid {
+    grid-template-columns: 1fr;
   }
 }

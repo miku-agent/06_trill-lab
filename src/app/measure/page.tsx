@@ -423,17 +423,19 @@ export default function MeasurePage() {
 
         <aside className="stack-gap-lg">
           <article className={`panel rhythm-panel ${hitFeedback === "miss" ? "is-miss" : ""}`}>
-            <div className="rhythm-stage">
-              <div className="combo-display">
-                <span className="combo-label">STREAK</span>
-                <strong className="combo-value">{currentStreak}</strong>
+            <div className="rhythm-stage compact-rhythm-stage">
+              <div className="combo-display compact-combo-display">
+                <div>
+                  <span className="combo-label">STREAK</span>
+                  <strong className="combo-value compact-combo-value">{currentStreak}</strong>
+                </div>
                 <span className={`hit-badge ${hitFeedback ? `is-${hitFeedback}` : ""}`}>
                   {hitFeedback === "good" ? "GOOD" : hitFeedback === "miss" ? "MISS" : "READY"}
                 </span>
               </div>
-              <div className="pad-grid">
-                <RhythmPad label="LEFT" value={configuredKeys[0]} isActive={activePad === "primary"} />
-                <RhythmPad label="RIGHT" value={configuredKeys[1]} isActive={activePad === "secondary"} />
+              <div className="pad-grid compact-pad-grid">
+                <RhythmPad label="LEFT" value={configuredKeys[0]} isActive={activePad === "primary"} compact />
+                <RhythmPad label="RIGHT" value={configuredKeys[1]} isActive={activePad === "secondary"} compact />
               </div>
             </div>
           </article>
@@ -470,9 +472,19 @@ function Stat({ label, value }: { label: string; value: string }) {
   );
 }
 
-function RhythmPad({ label, value, isActive }: { label: string; value: string; isActive: boolean }) {
+function RhythmPad({
+  label,
+  value,
+  isActive,
+  compact = false,
+}: {
+  label: string;
+  value: string;
+  isActive: boolean;
+  compact?: boolean;
+}) {
   return (
-    <div className={`rhythm-pad ${isActive ? "is-active" : ""}`}>
+    <div className={`rhythm-pad ${compact ? "is-compact" : ""} ${isActive ? "is-active" : ""}`}>
       <span className="rhythm-pad-label">{label}</span>
       <strong className="rhythm-pad-value">{value}</strong>
     </div>

@@ -310,11 +310,20 @@ main {
   gap: 18px;
 }
 
+.compact-rhythm-stage {
+  gap: 14px;
+}
+
 .combo-display {
   display: flex;
   align-items: end;
   gap: 12px;
   flex-wrap: wrap;
+}
+
+.compact-combo-display {
+  align-items: center;
+  justify-content: space-between;
 }
 
 .combo-label,
@@ -329,6 +338,12 @@ main {
 .combo-value {
   font-size: clamp(3rem, 8vw, 5rem);
   line-height: 0.95;
+  display: block;
+}
+
+.compact-combo-value {
+  font-size: clamp(2.2rem, 5vw, 3.2rem);
+  margin-top: 4px;
 }
 
 .hit-badge {
@@ -360,6 +375,10 @@ main {
   gap: 14px;
 }
 
+.compact-pad-grid {
+  gap: 10px;
+}
+
 .rhythm-pad {
   position: relative;
   overflow: hidden;
@@ -371,6 +390,12 @@ main {
   border: 1px solid var(--line);
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02));
   transition: transform 120ms ease, border-color 120ms ease, box-shadow 120ms ease, background 120ms ease;
+}
+
+.rhythm-pad.is-compact {
+  min-height: 116px;
+  padding: 14px;
+  border-radius: 18px;
 }
 
 .rhythm-pad::after {
@@ -397,6 +422,10 @@ main {
 .rhythm-pad-value {
   font-size: clamp(2.8rem, 8vw, 4.8rem);
   line-height: 1;
+}
+
+.rhythm-pad.is-compact .rhythm-pad-value {
+  font-size: clamp(2rem, 4vw, 2.8rem);
 }
 
 .simple-panel {

@@ -82,6 +82,18 @@ function calculateConsistencyScore(intervals: number[]) {
   return Math.max(0, Math.round(100 - (standardDeviation / average) * 100));
 }
 
+function calculateAverage(values: number[]) {
+  if (values.length === 0) return null;
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function calculateStandardDeviation(values: number[]) {
+  const average = calculateAverage(values);
+  if (average === null) return null;
+  const variance = values.reduce((sum, value) => sum + (value - average) ** 2, 0) / values.length;
+  return Math.sqrt(variance);
+}
+
 function normalizeKey(value: string) {
   if (value === " ") return "SPACE";
   if (value === "Escape") return "ESC";
@@ -192,6 +204,8 @@ function MeasurePageContent() {
   const activePadTimeoutRef = useRef<number | null>(null);
   const hitFeedbackTimeoutRef = useRef<number | null>(null);
   const expectedIndexRef = useRef(0);
+  const currentRunTimestampsRef = useRef<number[]>([]);
+  const completedRunsRef = useRef<Array<{ durationMs: number; intervals: [number, number, number] }>>([]);
 
   const activePreset = getPresetConfig(measureVariant, pattern);
   const configuredKeys = useMemo(() => keys.map((value) => normalizeKey(value)), [keys]);
@@ -247,6 +261,20 @@ function MeasurePageContent() {
     const fastestIntervalMs = intervals.length > 0 ? Math.min(...intervals) : null;
     const slowestIntervalMs = intervals.length > 0 ? Math.max(...intervals) : null;
     const consistencyScore = calculateConsistencyScore(intervals);
+    const completedRuns = completedRunsRef.current;
+    const runDurations = completedRuns.map((run) => run.durationMs);
+    const stepIntervals = completedRuns.flatMap((run) => run.intervals);
+    const drurukStats = pattern === "druruk"
+      ? {
+          completedRuns: completedRuns.length,
+          averageRunDurationMs: calculateAverage(runDurations),
+          runDurationStdDevMs: calculateStandardDeviation(runDurations),
+          averageStepIntervalMs: calculateAverage(stepIntervals),
+          stepIntervalStdDevMs: calculateStandardDeviation(stepIntervals),
+          runDurations,
+          stepIntervals,
+        }
+      : undefined;
 
     trackEvent("measure_finish", {
       pattern,
@@ -257,6 +285,11 @@ function MeasurePageContent() {
       invalid_hits: invalidHitsRef.current,
       peak_streak: peakStreakRef.current,
       consistency_score: consistencyScore,
+      completed_runs: drurukStats?.completedRuns,
+      run_avg_ms: drurukStats?.averageRunDurationMs ? Math.round(drurukStats.averageRunDurationMs) : undefined,
+      run_stddev_ms: drurukStats?.runDurationStdDevMs ? Math.round(drurukStats.runDurationStdDevMs) : undefined,
+      step_avg_ms: drurukStats?.averageStepIntervalMs ? Math.round(drurukStats.averageStepIntervalMs) : undefined,
+      step_stddev_ms: drurukStats?.stepIntervalStdDevMs ? Math.round(drurukStats.stepIntervalStdDevMs) : undefined,
     });
 
     setResult({
@@ -270,6 +303,7 @@ function MeasurePageContent() {
       slowestIntervalMs,
       consistencyScore,
       intervals,
+      druruk: drurukStats,
     });
   }, [measureVariant, pattern, setResult, setSessionState]);
 
@@ -293,6 +327,8 @@ function MeasurePageContent() {
     invalidHitsRef.current = 0;
     peakStreakRef.current = 0;
     acceptedTimestampsRef.current = [];
+    currentRunTimestampsRef.current = [];
+    completedRunsRef.current = [];
   }, [
     setCountdownLeft,
     setTimeLeft,
@@ -356,12 +392,12 @@ function MeasurePageContent() {
   }, [finishRun, sessionState]);
 
   useEffect(() => {
-    if (!result || sessionState !== "finished" || pattern !== "trill") return;
+    if (!result || sessionState !== "finished") return;
     appendMeasureHistory(
       createMeasureHistoryEntry({
+        pattern,
         variant: measureVariant,
-        primaryKey: activeKeys[0],
-        secondaryKey: activeKeys[1],
+        keys: activeKeys,
         result,
       }),
     );
@@ -406,7 +442,28 @@ function MeasurePageContent() {
       if (pressedKey === expectedKey) {
         triggerPadFeedback(Math.max(padIndex, 0));
         triggerHitFeedback("good");
-        acceptedTimestampsRef.current = [...acceptedTimestampsRef.current, performance.now()];
+        const timestamp = performance.now();
+        acceptedTimestampsRef.current = [...acceptedTimestampsRef.current, timestamp];
+
+        if (pattern === "druruk") {
+          const runTimestamps = [...currentRunTimestampsRef.current, timestamp];
+          currentRunTimestampsRef.current = runTimestamps;
+          if (runTimestamps.length === expectedSequence.length) {
+            completedRunsRef.current = [
+              ...completedRunsRef.current,
+              {
+                durationMs: runTimestamps[runTimestamps.length - 1] - runTimestamps[0],
+                intervals: [
+                  runTimestamps[1] - runTimestamps[0],
+                  runTimestamps[2] - runTimestamps[1],
+                  runTimestamps[3] - runTimestamps[2],
+                ],
+              },
+            ];
+            currentRunTimestampsRef.current = [];
+          }
+        }
+
         expectedIndexRef.current = (expectedIndexRef.current + 1) % expectedSequence.length;
         setSequenceIndex(expectedIndexRef.current);
         setValidHits((current) => {
@@ -427,6 +484,11 @@ function MeasurePageContent() {
       }
 
       triggerHitFeedback("miss");
+      if (pattern === "druruk") {
+        expectedIndexRef.current = 0;
+        currentRunTimestampsRef.current = [];
+        setSequenceIndex(0);
+      }
       setInvalidHits((current) => {
         const next = current + 1;
         invalidHitsRef.current = next;
@@ -437,7 +499,7 @@ function MeasurePageContent() {
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [activeKeys, expectedSequence, hasValidKeyConfig, keyCaptureTarget, resetStats, triggerHitFeedback, triggerPadFeedback]);
+  }, [activeKeys, expectedSequence, hasValidKeyConfig, keyCaptureTarget, pattern, resetStats, triggerHitFeedback, triggerPadFeedback]);
 
   function startRun() {
     if (!hasValidKeyConfig || keyCaptureTarget !== null) return;
@@ -615,19 +677,42 @@ function MeasurePageContent() {
         <article className="panel result-panel stack-gap-lg">
           <div>
             <p className="section-label">결과</p>
-            <h2 className="result-title">{result ? `${result.bpm} BPM` : "-"}</h2>
+            <h2 className="result-title">
+              {result
+                ? pattern === "druruk"
+                  ? `${result.druruk?.completedRuns ?? 0} RUNS`
+                  : `${result.bpm} BPM`
+                : "-"}
+            </h2>
             <p className="section-subtitle">
               {result
-                ? `정확도 ${formatPercent(result.accuracy)} · 유효 ${result.validHits} · 무효 ${result.invalidHits} · 최대 스트릭 ${result.peakStreak}`
+                ? pattern === "druruk"
+                  ? `평균 드르륵 ${formatMs(result.druruk?.averageRunDurationMs ?? null)} · 단계 간격 표준편차 ${formatMs(result.druruk?.stepIntervalStdDevMs ?? null)} · 참고 BPM ${result.bpm}`
+                  : `정확도 ${formatPercent(result.accuracy)} · 유효 ${result.validHits} · 무효 ${result.invalidHits} · 최대 스트릭 ${result.peakStreak}`
                 : "측정 전"}
             </p>
           </div>
 
           <div className="interval-stats-grid">
-            <Stat label="평균 간격" value={result ? formatMs(result.averageIntervalMs) : "-"} />
-            <Stat label="최고 속도" value={result ? formatMs(result.fastestIntervalMs) : "-"} />
-            <Stat label="최저 속도" value={result ? formatMs(result.slowestIntervalMs) : "-"} />
-            <Stat label="일정함" value={result ? `${result.consistencyScore}%` : "-"} />
+            {pattern === "druruk" ? (
+              <>
+                <Stat label="완성 드르륵" value={result ? String(result.druruk?.completedRuns ?? 0) : "-"} />
+                <Stat label="평균 드르륵" value={result ? formatMs(result.druruk?.averageRunDurationMs ?? null) : "-"} />
+                <Stat label="드르륵 표준편차" value={result ? formatMs(result.druruk?.runDurationStdDevMs ?? null) : "-"} />
+                <Stat label="평균 단계 간격" value={result ? formatMs(result.druruk?.averageStepIntervalMs ?? null) : "-"} />
+                <Stat label="단계 간격 표준편차" value={result ? formatMs(result.druruk?.stepIntervalStdDevMs ?? null) : "-"} />
+                <Stat label="참고 BPM" value={result ? String(result.bpm) : "-"} />
+                <Stat label="정확도" value={result ? formatPercent(result.accuracy) : "-"} />
+                <Stat label="일정함" value={result ? `${result.consistencyScore}%` : "-"} />
+              </>
+            ) : (
+              <>
+                <Stat label="평균 간격" value={result ? formatMs(result.averageIntervalMs) : "-"} />
+                <Stat label="최고 속도" value={result ? formatMs(result.fastestIntervalMs) : "-"} />
+                <Stat label="최저 속도" value={result ? formatMs(result.slowestIntervalMs) : "-"} />
+                <Stat label="일정함" value={result ? `${result.consistencyScore}%` : "-"} />
+              </>
+            )}
           </div>
 
           <div className="interval-chart-wrap">

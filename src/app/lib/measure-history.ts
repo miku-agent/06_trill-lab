@@ -1,4 +1,16 @@
+import type { PatternKey } from "./patterns";
+
 export type MeasureVariant = "left" | "right" | "both";
+
+export type DrurukStats = {
+  completedRuns: number;
+  averageRunDurationMs: number | null;
+  runDurationStdDevMs: number | null;
+  averageStepIntervalMs: number | null;
+  stepIntervalStdDevMs: number | null;
+  runDurations: number[];
+  stepIntervals: number[];
+};
 
 export type MeasureResult = {
   bpm: number;
@@ -11,18 +23,21 @@ export type MeasureResult = {
   slowestIntervalMs: number | null;
   consistencyScore: number;
   intervals: number[];
+  druruk?: DrurukStats;
 };
 
 export type MeasureHistoryEntry = {
   id: string;
   createdAt: string;
+  pattern: PatternKey;
   variant: MeasureVariant;
   primaryKey: string;
   secondaryKey: string;
+  keys: string[];
   result: MeasureResult;
 };
 
-export const MEASURE_HISTORY_STORAGE_KEY = "trill-lab.measure-history.v1";
+export const MEASURE_HISTORY_STORAGE_KEY = "trill-lab.measure-history.v2";
 
 export function readMeasureHistory(): MeasureHistoryEntry[] {
   if (typeof window === "undefined") return [];
@@ -49,17 +64,19 @@ export function appendMeasureHistory(entry: MeasureHistoryEntry) {
 }
 
 export function createMeasureHistoryEntry(params: {
+  pattern: PatternKey;
   variant: MeasureVariant;
-  primaryKey: string;
-  secondaryKey: string;
+  keys: string[];
   result: MeasureResult;
 }): MeasureHistoryEntry {
   return {
     id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     createdAt: new Date().toISOString(),
+    pattern: params.pattern,
     variant: params.variant,
-    primaryKey: params.primaryKey,
-    secondaryKey: params.secondaryKey,
+    primaryKey: params.keys[0] ?? "-",
+    secondaryKey: params.keys[1] ?? "-",
+    keys: params.keys,
     result: params.result,
   };
 }
@@ -73,6 +90,11 @@ export function formatMs(value: number | null) {
   return `${Math.round(value)} ms`;
 }
 
+export function formatDecimal(value: number | null, digits = 1) {
+  if (value === null || Number.isNaN(value)) return "-";
+  return `${value.toFixed(digits)}`;
+}
+
 export function formatDateTime(value: string) {
   return new Intl.DateTimeFormat("en-US", {
     month: "short",
@@ -82,8 +104,16 @@ export function formatDateTime(value: string) {
   }).format(new Date(value));
 }
 
-export function getVariantLabel(variant: MeasureVariant) {
+export function getVariantLabel(variant: MeasureVariant, pattern?: PatternKey) {
+  if (pattern === "druruk") return variant === "right" ? "4321 모드" : "1234 모드";
+  if (pattern === "yeonta") return "연타 모드";
   if (variant === "left") return "왼손 모드";
   if (variant === "right") return "오른손 모드";
   return "양손 모드";
+}
+
+export function getPatternLabel(pattern: PatternKey) {
+  if (pattern === "trill") return "트릴";
+  if (pattern === "druruk") return "드르륵";
+  return "연타";
 }

@@ -350,7 +350,16 @@ export default function MeasurePage() {
             : "READY";
 
   return (
-    <main className="page-main">
+    <main className="page-main measure-page">
+      {sessionState === "countdown" ? (
+        <div className="countdown-overlay" aria-live="assertive">
+          <div className="countdown-overlay-inner">
+            <span className="countdown-caption">GET READY</span>
+            <strong className="countdown-value">{countdownLeft}</strong>
+          </div>
+        </div>
+      ) : null}
+
       <section className="page-section compact-hero">
         <h1 className="page-title">측정 모드</h1>
         <div className="status-pill">{statusLabel}</div>

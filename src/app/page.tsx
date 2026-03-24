@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 type SessionState = "idle" | "countdown" | "running" | "finished";
 type ModeKey = "measure" | "challenge" | "practice";
 type MeasureVariant = "left" | "right" | "both";
+type KeyCaptureTarget = "primary" | "secondary" | null;
 
 type Result = {
   bpm: number;
@@ -98,6 +99,7 @@ export default function HomePage() {
   const [measureVariant, setMeasureVariant] = useState<MeasureVariant>("both");
   const [primaryKey, setPrimaryKey] = useState("A");
   const [secondaryKey, setSecondaryKey] = useState("L");
+  const [keyCaptureTarget, setKeyCaptureTarget] = useState<KeyCaptureTarget>(null);
   const [sessionState, setSessionState] = useState<SessionState>("idle");
   const [countdownLeft, setCountdownLeft] = useState(COUNTDOWN_SECONDS);
   const [timeLeft, setTimeLeft] = useState(TEST_SECONDS);
@@ -124,6 +126,12 @@ export default function HomePage() {
       return "이 모드는 아직 레이아웃만 잡혀 있어요. 먼저 측정 모드로 감을 확인해보세요.";
     }
 
+    if (keyCaptureTarget) {
+      return keyCaptureTarget === "primary"
+        ? "첫 번째 키를 기다리는 중이에요. 원하는 키를 하나 눌러주세요."
+        : "두 번째 키를 기다리는 중이에요. 원하는 키를 하나 눌러주세요.";
+    }
+
     if (!hasValidKeyConfig) {
       return "서로 다른 두 키를 설정해야 측정을 시작할 수 있어요.";
     }
@@ -141,7 +149,7 @@ export default function HomePage() {
     }
 
     return `${activePreset.title} 기준으로 ${configuredKeys[0]} / ${configuredKeys[1]} 키를 사용합니다. 10초 동안 한계 속도로 트릴을 쳐보세요.`;
-  }, [activePreset.title, configuredKeys, countdownLeft, hasValidKeyConfig, result, selectedMode, sessionState]);
+  }, [activePreset.title, configuredKeys, countdownLeft, hasValidKeyConfig, keyCaptureTarget, result, selectedMode, sessionState]);
 
   const finishRun = useCallback(() => {
     runningRef.current = false;
@@ -159,6 +167,23 @@ export default function HomePage() {
       accuracy,
       peakStreak: peakStreakRef.current,
     });
+  }, []);
+
+  const resetStats = useCallback(() => {
+    setCountdownLeft(COUNTDOWN_SECONDS);
+    setTimeLeft(TEST_SECONDS);
+    setLastAcceptedKey(null);
+    setLatestInput("-");
+    setValidHits(0);
+    setInvalidHits(0);
+    setCurrentStreak(0);
+    setPeakStreak(0);
+    setResult(null);
+    deadlineRef.current = null;
+    runningRef.current = false;
+    validHitsRef.current = 0;
+    invalidHitsRef.current = 0;
+    peakStreakRef.current = 0;
   }, []);
 
   useEffect(() => {
@@ -206,6 +231,27 @@ export default function HomePage() {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       const pressedKey = normalizeKey(event.key);
+      if (!pressedKey) {
+        return;
+      }
+
+      if (keyCaptureTarget) {
+        event.preventDefault();
+
+        if (keyCaptureTarget === "primary") {
+          setPrimaryKey(pressedKey);
+        } else {
+          setSecondaryKey(pressedKey);
+        }
+
+        setKeyCaptureTarget(null);
+        runningRef.current = false;
+        deadlineRef.current = null;
+        setSessionState("idle");
+        resetStats();
+        return;
+      }
+
       if (!runningRef.current || !hasValidKeyConfig || !configuredKeys.includes(pressedKey)) {
         return;
       }
@@ -242,24 +288,7 @@ export default function HomePage() {
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [configuredKeys, hasValidKeyConfig, lastAcceptedKey]);
-
-  function resetStats() {
-    setCountdownLeft(COUNTDOWN_SECONDS);
-    setTimeLeft(TEST_SECONDS);
-    setLastAcceptedKey(null);
-    setLatestInput("-");
-    setValidHits(0);
-    setInvalidHits(0);
-    setCurrentStreak(0);
-    setPeakStreak(0);
-    setResult(null);
-    deadlineRef.current = null;
-    runningRef.current = false;
-    validHitsRef.current = 0;
-    invalidHitsRef.current = 0;
-    peakStreakRef.current = 0;
-  }
+  }, [configuredKeys, hasValidKeyConfig, keyCaptureTarget, lastAcceptedKey, resetStats]);
 
   function startRun() {
     if (selectedMode !== "measure" || !hasValidKeyConfig) {
@@ -272,6 +301,7 @@ export default function HomePage() {
 
   function changeMode(mode: ModeKey) {
     setSelectedMode(mode);
+    setKeyCaptureTarget(null);
     runningRef.current = false;
     deadlineRef.current = null;
     setSessionState("idle");
@@ -283,25 +313,18 @@ export default function HomePage() {
     setMeasureVariant(variant);
     setPrimaryKey(preset.defaultKeys[0]);
     setSecondaryKey(preset.defaultKeys[1]);
+    setKeyCaptureTarget(null);
     runningRef.current = false;
     deadlineRef.current = null;
     setSessionState("idle");
     resetStats();
   }
 
-  function updatePrimaryKey(value: string) {
-    setPrimaryKey(normalizeKey(value));
+  function beginKeyCapture(target: Exclude<KeyCaptureTarget, null>) {
     runningRef.current = false;
     deadlineRef.current = null;
     setSessionState("idle");
-    resetStats();
-  }
-
-  function updateSecondaryKey(value: string) {
-    setSecondaryKey(normalizeKey(value));
-    runningRef.current = false;
-    deadlineRef.current = null;
-    setSessionState("idle");
+    setKeyCaptureTarget(target);
     resetStats();
   }
 
@@ -505,14 +528,16 @@ export default function HomePage() {
                         label="첫 번째 키"
                         value={primaryKey}
                         hint={measureVariant === "left" ? "예: A" : measureVariant === "right" ? "예: K" : "예: A"}
-                        onChange={updatePrimaryKey}
+                        isCapturing={keyCaptureTarget === "primary"}
+                        onStartCapture={() => beginKeyCapture("primary")}
                         disabled={sessionState === "countdown" || sessionState === "running"}
                       />
                       <KeySettingCard
                         label="두 번째 키"
                         value={secondaryKey}
                         hint={measureVariant === "left" ? "예: S" : measureVariant === "right" ? "예: L" : "예: L"}
-                        onChange={updateSecondaryKey}
+                        isCapturing={keyCaptureTarget === "secondary"}
+                        onStartCapture={() => beginKeyCapture("secondary")}
                         disabled={sessionState === "countdown" || sessionState === "running"}
                       />
                     </div>
@@ -527,7 +552,7 @@ export default function HomePage() {
                 <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
                   <button
                     onClick={startRun}
-                    disabled={sessionState === "countdown" || sessionState === "running" || !hasValidKeyConfig}
+                    disabled={sessionState === "countdown" || sessionState === "running" || !hasValidKeyConfig || keyCaptureTarget !== null}
                     style={{
                       border: 0,
                       borderRadius: 16,
@@ -603,7 +628,7 @@ export default function HomePage() {
               <h3 style={{ margin: "8px 0 14px" }}>측정 모드 개편 포인트</h3>
               <ul style={{ paddingLeft: 20, color: "var(--muted)", lineHeight: 1.8, marginBottom: 0 }}>
                 <li>왼손 / 오른손 / 양손을 독립 preset으로 분리</li>
-                <li>preset 선택 후 키 바인딩 수동 수정 가능</li>
+                <li>preset 선택 후 원하는 키를 눌러 즉시 바인딩 가능</li>
                 <li>입력 키가 겹치면 측정 시작 비활성화</li>
                 <li>이후 도전/연습 모드도 같은 키 세팅 구조를 재사용 가능</li>
               </ul>
@@ -675,46 +700,65 @@ function KeySettingCard({
   label,
   value,
   hint,
-  onChange,
+  isCapturing,
+  onStartCapture,
   disabled,
 }: {
   label: string;
   value: string;
   hint: string;
-  onChange: (value: string) => void;
+  isCapturing: boolean;
+  onStartCapture: () => void;
   disabled: boolean;
 }) {
   return (
-    <label
+    <div
       style={{
         display: "grid",
         gap: 10,
         padding: 16,
         borderRadius: 18,
-        border: "1px solid var(--line)",
-        background: "rgba(255,255,255,0.02)",
+        border: isCapturing ? "1px solid rgba(100, 245, 231, 0.7)" : "1px solid var(--line)",
+        background: isCapturing ? "rgba(57, 197, 187, 0.08)" : "rgba(255,255,255,0.02)",
       }}
     >
       <span style={{ color: "var(--muted)" }}>{label}</span>
-      <input
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        disabled={disabled}
-        placeholder={hint}
-        maxLength={1}
+      <div
         style={{
           borderRadius: 14,
           border: "1px solid var(--line)",
           background: "rgba(7, 19, 26, 0.9)",
           color: "var(--text)",
           padding: "12px 14px",
-          outline: "none",
           fontSize: 20,
           fontWeight: 700,
-          textTransform: "uppercase",
+          minHeight: 50,
+          display: "flex",
+          alignItems: "center",
         }}
-      />
-      <span style={{ color: "var(--muted)", fontSize: 13 }}>{hint}</span>
-    </label>
+      >
+        {value || "-"}
+      </div>
+      <button
+        type="button"
+        onClick={onStartCapture}
+        disabled={disabled}
+        style={{
+          borderRadius: 14,
+          border: "1px solid var(--line)",
+          background: isCapturing ? "rgba(57, 197, 187, 0.16)" : "rgba(255,255,255,0.04)",
+          color: "var(--text)",
+          padding: "10px 12px",
+          fontWeight: 700,
+          cursor: disabled ? "not-allowed" : "pointer",
+          opacity: disabled ? 0.5 : 1,
+        }}
+      >
+        {isCapturing ? "아무 키나 눌러주세요..." : "키 변경하기"}
+      </button>
+      <span style={{ color: "var(--muted)", fontSize: 13 }}>
+        {isCapturing ? "다음 키 입력을 바로 이 슬롯에 저장해요." : hint}
+      </span>
+    </div>
   );
 }

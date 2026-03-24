@@ -553,6 +553,113 @@ main {
   align-content: center;
 }
 
+.stats-overview-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.stats-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(320px, 1.1fr);
+  gap: 14px;
+}
+
+.history-list {
+  display: grid;
+  gap: 10px;
+}
+
+.history-card {
+  display: grid;
+  gap: 8px;
+  text-align: left;
+  padding: 14px 16px;
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.history-card.is-active {
+  border-color: rgba(100, 245, 231, 0.7);
+  background: rgba(57, 197, 187, 0.12);
+}
+
+.history-card strong {
+  display: block;
+  font-size: 20px;
+}
+
+.history-card span,
+.history-meta {
+  color: var(--muted);
+}
+
+.history-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 14px;
+}
+
+.share-card-preview {
+  display: grid;
+  gap: 18px;
+  padding: 22px;
+  border-radius: 24px;
+  border: 1px solid rgba(100, 245, 231, 0.18);
+  background:
+    radial-gradient(circle at top left, rgba(100, 245, 231, 0.12), transparent 28%),
+    linear-gradient(160deg, rgba(9, 26, 35, 0.98), rgba(18, 50, 64, 0.94));
+}
+
+.share-card-preview-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.brand-mark {
+  color: var(--accent-strong);
+  font-weight: 800;
+  letter-spacing: 0.14em;
+}
+
+.share-bpm {
+  font-size: clamp(3rem, 8vw, 5rem);
+  line-height: 0.95;
+}
+
+.share-card-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.stat-card-compact strong {
+  font-size: 18px;
+}
+
+.share-actions {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+}
+
+@media (max-width: 960px) {
+  .measure-grid,
+  .stats-layout,
+  .stats-overview-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media (max-width: 960px) {
   .measure-grid {
     grid-template-columns: 1fr;

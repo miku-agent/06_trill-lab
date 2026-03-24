@@ -10,13 +10,13 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="ko">
+    <html lang="en">
       <body>
         <header className="site-header">
           <div className="site-shell site-header-inner">
             <Link href="/measure" className="brand">
               <span className="brand-mark">TRILL LAB</span>
-              <strong>트릴 연습실</strong>
+              <strong>Trill practice studio</strong>
             </Link>
             <HeaderNav />
           </div>

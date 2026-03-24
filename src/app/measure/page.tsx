@@ -1,23 +1,17 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  appendMeasureHistory,
+  createMeasureHistoryEntry,
+  formatMs,
+  formatPercent,
+  type MeasureResult as Result,
+  type MeasureVariant,
+} from "../lib/measure-history";
 
 type SessionState = "idle" | "countdown" | "running" | "finished";
-type MeasureVariant = "left" | "right" | "both";
 type KeyCaptureTarget = "primary" | "secondary" | null;
-
-type Result = {
-  bpm: number;
-  validHits: number;
-  invalidHits: number;
-  accuracy: number;
-  peakStreak: number;
-  averageIntervalMs: number | null;
-  fastestIntervalMs: number | null;
-  slowestIntervalMs: number | null;
-  consistencyScore: number;
-  intervals: number[];
-};
 
 type MeasurePreset = {
   key: MeasureVariant;
@@ -33,32 +27,23 @@ const FORBIDDEN_CAPTURE_KEYS = new Set(["ESC", "TAB", "ENTER", "CMD", "CTRL", "A
 const MEASURE_PRESETS: MeasurePreset[] = [
   {
     key: "left",
-    title: "왼손 모드",
-    description: "왼손 두 키로 한손 트릴을 측정해요.",
+    title: "Left hand",
+    description: "Measure one-hand trill speed with two left-hand keys.",
     defaultKeys: ["A", "S"],
   },
   {
     key: "right",
-    title: "오른손 모드",
-    description: "오른손 두 키로 한손 트릴을 측정해요.",
+    title: "Right hand",
+    description: "Measure one-hand trill speed with two right-hand keys.",
     defaultKeys: ["K", "L"],
   },
   {
     key: "both",
-    title: "양손 모드",
-    description: "좌/우 손 분리 키로 일반적인 교대 트릴을 측정해요.",
+    title: "Both hands",
+    description: "Measure alternating trill speed with split left/right hand keys.",
     defaultKeys: ["A", "L"],
   },
 ];
-
-function formatPercent(value: number) {
-  return `${Math.round(value)}%`;
-}
-
-function formatMs(value: number | null) {
-  if (value === null || Number.isNaN(value)) return "-";
-  return `${Math.round(value)} ms`;
-}
 
 function calculateConsistencyScore(intervals: number[]) {
   if (intervals.length <= 1) return 100;
@@ -149,16 +134,16 @@ export default function MeasurePage() {
   const helperText = useMemo(() => {
     if (keyCaptureTarget) {
       return keyCaptureTarget === "primary"
-        ? "첫 번째 키를 기다리는 중이에요. 아무 키나 눌러주세요. ESC로 취소할 수 있어요."
-        : "두 번째 키를 기다리는 중이에요. 아무 키나 눌러주세요. ESC로 취소할 수 있어요.";
+        ? "Waiting for the first key. Press any key to bind it. Press ESC to cancel."
+        : "Waiting for the second key. Press any key to bind it. Press ESC to cancel.";
     }
 
     if (captureError) return captureError;
-    if (!hasValidKeyConfig) return "서로 다른 두 키를 설정해야 측정을 시작할 수 있어요.";
-    if (sessionState === "countdown") return `준비... ${countdownLeft}초 후 측정 시작`;
-    if (sessionState === "running") return `${configuredKeys[0]} 와 ${configuredKeys[1]} 키만 사용해서 정확히 번갈아 누르세요.`;
-    if (result) return "같은 키 반복은 invalid 처리돼요. 정확도를 유지하면서 BPM을 끌어올리는 게 핵심이에요.";
-    return `${activePreset.title} 기준 · ${configuredKeys[0]} / ${configuredKeys[1]}`;
+    if (!hasValidKeyConfig) return "You need two different keys before you can start measuring.";
+    if (sessionState === "countdown") return `Starting in ${countdownLeft}...`;
+    if (sessionState === "running") return `Alternate only between ${configuredKeys[0]} and ${configuredKeys[1]} as cleanly as possible.`;
+    if (result) return "Repeating the same key counts as invalid. Keep your accuracy high while pushing the BPM.";
+    return `${activePreset.title} preset · ${configuredKeys[0]} / ${configuredKeys[1]}`;
   }, [activePreset.title, captureError, configuredKeys, countdownLeft, hasValidKeyConfig, keyCaptureTarget, result, sessionState]);
 
   const triggerPadFeedback = useCallback((target: "primary" | "secondary") => {
@@ -275,6 +260,19 @@ export default function MeasurePage() {
   }, [finishRun, sessionState]);
 
   useEffect(() => {
+    if (!result || sessionState !== "finished") return;
+
+    appendMeasureHistory(
+      createMeasureHistoryEntry({
+        variant: measureVariant,
+        primaryKey: configuredKeys[0],
+        secondaryKey: configuredKeys[1],
+        result,
+      }),
+    );
+  }, [configuredKeys, measureVariant, result, sessionState]);
+
+  useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (keyCaptureTarget) {
         event.preventDefault();
@@ -287,7 +285,7 @@ export default function MeasurePage() {
         const pressedKey = normalizeKeyboardEvent(event);
         if (!pressedKey) return;
         if (FORBIDDEN_CAPTURE_KEYS.has(pressedKey)) {
-          setCaptureError(`${pressedKey} 키는 바인딩할 수 없어요. 다른 키를 눌러주세요.`);
+          setCaptureError(`${pressedKey} cannot be used for key binding. Press a different key.`);
           return;
         }
 
@@ -380,7 +378,7 @@ export default function MeasurePage() {
         : sessionState === "finished"
           ? "FINISHED"
           : keyCaptureTarget
-            ? "키 대기 중"
+            ? "CAPTURING"
             : "READY";
 
   return (
@@ -395,7 +393,7 @@ export default function MeasurePage() {
       ) : null}
 
       <section className="page-section compact-hero">
-        <h1 className="page-title">측정 모드</h1>
+        <h1 className="page-title">Measure mode</h1>
         <div className="status-pill">{statusLabel}</div>
       </section>
 
@@ -410,7 +408,7 @@ export default function MeasurePage() {
       <section className="measure-grid">
         <article className="panel stack-gap-lg start-panel">
           <div>
-            <p className="section-label">모드 선택</p>
+            <p className="section-label">Mode</p>
             <div className="preset-grid">
               {MEASURE_PRESETS.map((preset) => {
                 const isActive = preset.key === measureVariant;
@@ -430,27 +428,27 @@ export default function MeasurePage() {
           </div>
 
           <div>
-            <p className="section-label">키</p>
+            <p className="section-label">Keys</p>
             <div className="key-grid">
               <KeySettingCard
-                label="첫 번째 키"
+                label="Primary key"
                 value={primaryKey}
-                hint={measureVariant === "left" ? "예: A" : measureVariant === "right" ? "예: K" : "예: A"}
+                hint={measureVariant === "left" ? "Example: A" : measureVariant === "right" ? "Example: K" : "Example: A"}
                 isCapturing={keyCaptureTarget === "primary"}
                 onStartCapture={() => beginKeyCapture("primary")}
                 disabled={sessionState === "countdown" || sessionState === "running"}
               />
               <KeySettingCard
-                label="두 번째 키"
+                label="Secondary key"
                 value={secondaryKey}
-                hint={measureVariant === "left" ? "예: S" : measureVariant === "right" ? "예: L" : "예: L"}
+                hint={measureVariant === "left" ? "Example: S" : measureVariant === "right" ? "Example: L" : "Example: L"}
                 isCapturing={keyCaptureTarget === "secondary"}
                 onStartCapture={() => beginKeyCapture("secondary")}
                 disabled={sessionState === "countdown" || sessionState === "running"}
               />
             </div>
             <p className={`inline-note ${captureError || !hasValidKeyConfig ? "is-danger" : ""}`}>
-              {captureError ?? (hasValidKeyConfig ? `현재 ${configuredKeys[0]} / ${configuredKeys[1]} 조합으로 측정해요.` : "서로 다른 두 키를 입력해야 측정을 시작할 수 있어요.")}
+              {captureError ?? (hasValidKeyConfig ? `Current setup: ${configuredKeys[0]} / ${configuredKeys[1]}` : "You need two different keys before you can start.")}
             </p>
           </div>
 
@@ -460,7 +458,7 @@ export default function MeasurePage() {
               disabled={sessionState === "countdown" || sessionState === "running" || !hasValidKeyConfig || keyCaptureTarget !== null}
               className="primary-button primary-button-large"
             >
-              {result ? "다시 측정하기" : "측정 시작"}
+              {result ? "Measure again" : "Start measure"}
             </button>
           </div>
         </article>
@@ -485,11 +483,11 @@ export default function MeasurePage() {
           </article>
 
           <article className="panel stat-grid compact-stat-grid">
-            <Stat label="마지막 입력" value={latestInput} />
-            <Stat label="유효 입력" value={String(validHits)} />
-            <Stat label="무효 입력" value={String(invalidHits)} />
-            <Stat label="현재 스트릭" value={String(currentStreak)} />
-            <Stat label="최대 스트릭" value={String(peakStreak)} />
+            <Stat label="Latest input" value={latestInput} />
+            <Stat label="Valid hits" value={String(validHits)} />
+            <Stat label="Invalid hits" value={String(invalidHits)} />
+            <Stat label="Current streak" value={String(currentStreak)} />
+            <Stat label="Peak streak" value={String(peakStreak)} />
           </article>
         </aside>
       </section>
@@ -497,20 +495,20 @@ export default function MeasurePage() {
       <section className="page-section result-section">
         <article className="panel result-panel stack-gap-lg">
           <div>
-            <p className="section-label">결과</p>
+            <p className="section-label">Result</p>
             <h2 className="result-title">{result ? `${result.bpm} BPM` : "-"}</h2>
             <p className="section-subtitle">
               {result
-                ? `정확도 ${formatPercent(result.accuracy)} · 유효 ${result.validHits} · 무효 ${result.invalidHits} · 최대 스트릭 ${result.peakStreak}`
-                : "측정 전"}
+                ? `Accuracy ${formatPercent(result.accuracy)} · Valid ${result.validHits} · Invalid ${result.invalidHits} · Peak streak ${result.peakStreak}`
+                : "No result yet"}
             </p>
           </div>
 
           <div className="interval-stats-grid">
-            <Stat label="평균 간격" value={result ? formatMs(result.averageIntervalMs) : "-"} />
-            <Stat label="최고 속도" value={result ? formatMs(result.fastestIntervalMs) : "-"} />
-            <Stat label="최저 속도" value={result ? formatMs(result.slowestIntervalMs) : "-"} />
-            <Stat label="일정함" value={result ? `${result.consistencyScore}%` : "-"} />
+            <Stat label="Avg interval" value={result ? formatMs(result.averageIntervalMs) : "-"} />
+            <Stat label="Fastest" value={result ? formatMs(result.fastestIntervalMs) : "-"} />
+            <Stat label="Slowest" value={result ? formatMs(result.slowestIntervalMs) : "-"} />
+            <Stat label="Consistency" value={result ? `${result.consistencyScore}%` : "-"} />
           </div>
 
           <div className="interval-chart-wrap">
@@ -518,10 +516,10 @@ export default function MeasurePage() {
             {result && result.intervals.length > 1 ? (
               <>
                 <IntervalChart intervals={result.intervals} />
-                <p className="section-subtitle">선이 평평할수록 더 일정한 트릴이에요.</p>
+                <p className="section-subtitle">A flatter line means a more consistent trill.</p>
               </>
             ) : (
-              <p className="section-subtitle">유효 입력이 더 쌓이면 간격 그래프가 표시돼요.</p>
+              <p className="section-subtitle">Complete more valid hits to generate the interval graph.</p>
             )}
           </div>
         </article>
@@ -619,10 +617,10 @@ function KeySettingCard({
       <span className="key-label">{label}</span>
       <div className="key-value">{normalizeKey(value) || "-"}</div>
       <button type="button" onClick={onStartCapture} disabled={disabled} className="secondary-button">
-        {isCapturing ? "아무 키나 눌러주세요..." : "키 변경하기"}
+        {isCapturing ? "Press any key..." : "Change key"}
       </button>
       <span className="hint-text">
-        {isCapturing ? "다음 키 입력을 바로 이 슬롯에 저장해요. ESC로 취소할 수 있어요. ESC/TAB/ENTER/수정키는 사용할 수 없어요." : hint}
+        {isCapturing ? "The next key press will bind immediately. Press ESC to cancel. ESC/TAB/ENTER/modifier keys are not allowed." : hint}
       </span>
     </div>
   );

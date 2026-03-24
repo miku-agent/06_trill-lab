@@ -4,16 +4,17 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const NAV_ITEMS = [
-  { href: "/measure", label: "측정 모드" },
-  { href: "/challenge", label: "도전 모드" },
-  { href: "/practice", label: "연습 모드" },
+  { href: "/measure", label: "Measure" },
+  { href: "/stats", label: "Stats" },
+  { href: "/challenge", label: "Challenge" },
+  { href: "/practice", label: "Practice" },
 ];
 
 export function HeaderNav() {
   const pathname = usePathname();
 
   return (
-    <nav className="site-nav" aria-label="주요 모드">
+    <nav className="site-nav" aria-label="Primary navigation">
       {NAV_ITEMS.map((item) => {
         const isActive = pathname === item.href;
         return (

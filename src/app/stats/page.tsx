@@ -29,12 +29,9 @@ type StatsSummary = {
 };
 
 const FILTER_LINKS: Array<{ label: string; href: string }> = [
-  { label: "전체", href: "/stats" },
   { label: "트릴", href: "/stats?pattern=trill" },
+  { label: "드르륵", href: "/stats?pattern=druruk" },
   { label: "연타", href: "/stats?pattern=yeonta" },
-  { label: "드르륵 전체", href: "/stats?pattern=druruk" },
-  { label: "드르륵 1234", href: "/stats?pattern=druruk&variant=1234" },
-  { label: "드르륵 4321", href: "/stats?pattern=druruk&variant=4321" },
 ];
 
 export default function StatsPage() {
@@ -68,8 +65,10 @@ function StatsPageContent() {
   }, []);
 
   const filteredHistory = useMemo(() => {
+    if (!activePattern) return [];
+
     return history.filter((entry) => {
-      if (activePattern && entry.pattern !== activePattern) return false;
+      if (entry.pattern !== activePattern) return false;
       if (activeVariant) {
         if (activePattern === "druruk") {
           if (activeVariant === "1234" && !(entry.variant === "1234" || entry.variant === "left")) return false;
@@ -255,9 +254,9 @@ function StatsPageContent() {
       </section>
 
       <section className="page-section compact-summary panel">
-        <strong>쿼리 필터 지원</strong>
+        <strong>카테고리별 통계</strong>
         <span className="compact-summary-divider">·</span>
-        <span>예: `/stats?pattern=druruk`, `/stats?pattern=druruk&variant=1234`, `/stats?pattern=druruk&variant=4321`</span>
+        <span>`트릴` · `드르륵` · `연타`만 확인할 수 있어요.</span>
       </section>
 
       <section className="page-section pattern-select-grid" aria-label="통계 필터 선택">
@@ -273,12 +272,20 @@ function StatsPageContent() {
         })}
       </section>
 
-      {filteredHistory.length === 0 ? (
+      {!activePattern ? (
+        <section className="page-section">
+          <article className="panel simple-panel">
+            <p className="section-label">카테고리를 선택하세요</p>
+            <h2 className="section-title">전체 통계는 숨겼어요</h2>
+            <p className="section-subtitle">위에서 `트릴`, `드르륵`, `연타` 중 하나를 선택해 주세요.</p>
+          </article>
+        </section>
+      ) : filteredHistory.length === 0 ? (
         <section className="page-section">
           <article className="panel simple-panel">
             <p className="section-label">아직 데이터가 없어요</p>
-            <h2 className="section-title">이 필터에는 기록이 없어요</h2>
-            <p className="section-subtitle">다른 패턴/모드로 바꾸거나 측정을 한 번 더 완료해보세요.</p>
+            <h2 className="section-title">이 카테고리에는 기록이 없어요</h2>
+            <p className="section-subtitle">다른 패턴으로 바꾸거나 측정을 한 번 더 완료해보세요.</p>
           </article>
         </section>
       ) : (
@@ -402,7 +409,7 @@ function standardDeviation(values: number[]) {
 function getFilterTitle(pattern: PatternKey | null, variant: MeasureVariant | null) {
   if (pattern === "druruk" && variant) return `드르륵 ${getVariantLabel(variant, pattern)} 통계`;
   if (pattern) return `${getPatternDefinition(pattern).label} 통계`;
-  return "내 전체 기록";
+  return "카테고리별 통계";
 }
 
 function buildActiveFilterHref(pattern: PatternKey | null, variant: MeasureVariant | null) {

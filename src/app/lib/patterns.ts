@@ -1,4 +1,4 @@
-export type PatternKey = "trill" | "druruk";
+export type PatternKey = "trill" | "druruk" | "yeonta";
 
 export type PatternDefinition = {
   key: PatternKey;
@@ -22,6 +22,13 @@ export const PATTERN_DEFINITIONS: PatternDefinition[] = [
     shortLabel: "드르륵",
     description: "1234 또는 4321 모드로 4키 입력 속도와 안정감을 측정해요.",
     href: "/measure?pattern=druruk",
+  },
+  {
+    key: "yeonta",
+    label: "연타",
+    shortLabel: "연타",
+    description: "A / S / ; / ' 를 각각 4연타씩 반복하는 패턴 속도와 안정감을 측정해요.",
+    href: "/measure?pattern=yeonta",
   },
 ];
 

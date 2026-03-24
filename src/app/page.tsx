@@ -38,46 +38,46 @@ const MODE_CARDS: ModeCard[] = [
   {
     key: "measure",
     eyebrow: "MODE 01",
-    title: "측정 모드",
-    description: "현재 한계 속도를 짧고 정확하게 재는 기본 모드예요.",
+    title: "Measure Mode",
+    description: "A focused test mode for checking your current speed ceiling.",
     status: "LIVE",
-    bullets: ["16비트 기준 BPM 계산", "정확도 + 스트릭 표시", "기록 갱신용 반복 측정"],
+    bullets: ["16th-note BPM estimate", "Accuracy + streak tracking", "Built for repeat score attempts"],
   },
   {
     key: "challenge",
     eyebrow: "MODE 02",
-    title: "도전 모드",
-    description: "목표 BPM을 정해두고 버티는 방식으로 설계할 예정이에요.",
+    title: "Challenge Mode",
+    description: "Planned as a survival-style mode built around target BPM goals.",
     status: "COMING SOON",
-    bullets: ["목표 BPM 선택", "지속 시간 미션", "클리어 / 실패 판정"],
+    bullets: ["Target BPM selection", "Timed survival missions", "Clear / fail judgement"],
   },
   {
     key: "practice",
     eyebrow: "MODE 03",
-    title: "연습 모드",
-    description: "낮은 속도부터 단계적으로 감각을 익히는 훈련 모드예요.",
+    title: "Practice Mode",
+    description: "A training mode for building control step by step from slower speeds.",
     status: "COMING SOON",
-    bullets: ["속도 단계별 루프", "좌우 안정성 훈련", "패턴별 확장 가능"],
+    bullets: ["Speed step loops", "Left/right stability practice", "Expandable pattern drills"],
   },
 ];
 
 const MEASURE_PRESETS: MeasurePreset[] = [
   {
     key: "left",
-    title: "왼손 모드",
-    description: "왼손 두 키로 한손 트릴을 측정해요.",
+    title: "Left Hand",
+    description: "Measure a one-hand trill using two left-hand keys.",
     defaultKeys: ["A", "S"],
   },
   {
     key: "right",
-    title: "오른손 모드",
-    description: "오른손 두 키로 한손 트릴을 측정해요.",
+    title: "Right Hand",
+    description: "Measure a one-hand trill using two right-hand keys.",
     defaultKeys: ["K", "L"],
   },
   {
     key: "both",
-    title: "양손 모드",
-    description: "좌/우 손 분리 키로 일반적인 교대 트릴을 측정해요.",
+    title: "Both Hands",
+    description: "Measure a standard alternating trill with split left/right keys.",
     defaultKeys: ["A", "L"],
   },
 ];
@@ -87,7 +87,20 @@ function formatPercent(value: number) {
 }
 
 function normalizeKey(value: string) {
-  return value.trim().slice(0, 1).toUpperCase();
+  if (value === " ") return "SPACE";
+  if (value === "Escape") return "ESC";
+  if (value === "ArrowUp") return "↑";
+  if (value === "ArrowDown") return "↓";
+  if (value === "ArrowLeft") return "←";
+  if (value === "ArrowRight") return "→";
+  if (value === "Control") return "CTRL";
+  if (value === "Shift") return "SHIFT";
+  if (value === "Alt") return "ALT";
+  if (value === "Meta") return "CMD";
+  if (value === "Enter") return "ENTER";
+  if (value === "Tab") return "TAB";
+  if (value === "Backspace") return "BACKSPACE";
+  return value.trim().toUpperCase();
 }
 
 function getPresetConfig(variant: MeasureVariant) {
@@ -123,32 +136,32 @@ export default function HomePage() {
 
   const helperText = useMemo(() => {
     if (selectedMode !== "measure") {
-      return "이 모드는 아직 레이아웃만 잡혀 있어요. 먼저 측정 모드로 감을 확인해보세요.";
+      return "This mode is still a layout stub. Try Measure Mode first.";
     }
 
     if (keyCaptureTarget) {
       return keyCaptureTarget === "primary"
-        ? "첫 번째 키를 기다리는 중이에요. 원하는 키를 하나 눌러주세요."
-        : "두 번째 키를 기다리는 중이에요. 원하는 키를 하나 눌러주세요.";
+        ? "Listening for the primary key. Press any key now. Press ESC to cancel."
+        : "Listening for the secondary key. Press any key now. Press ESC to cancel.";
     }
 
     if (!hasValidKeyConfig) {
-      return "서로 다른 두 키를 설정해야 측정을 시작할 수 있어요.";
+      return "Choose two different keys before starting the test.";
     }
 
     if (sessionState === "countdown") {
-      return `준비... ${countdownLeft}초 후 측정 시작`;
+      return `Get ready... starting in ${countdownLeft}`;
     }
 
     if (sessionState === "running") {
-      return `${configuredKeys[0]} 와 ${configuredKeys[1]} 키만 사용해서 정확히 번갈아 누르세요.`;
+      return `Use only ${configuredKeys[0]} and ${configuredKeys[1]}, alternating as cleanly as possible.`;
     }
 
     if (result) {
-      return "같은 키 반복은 invalid 처리돼요. 정확도를 유지하면서 BPM을 끌어올리는 게 핵심이에요.";
+      return "Repeating the same key counts as invalid. Push speed without losing accuracy.";
     }
 
-    return `${activePreset.title} 기준으로 ${configuredKeys[0]} / ${configuredKeys[1]} 키를 사용합니다. 10초 동안 한계 속도로 트릴을 쳐보세요.`;
+    return `Using ${configuredKeys[0]} / ${configuredKeys[1]} for ${activePreset.title}. Push your fastest trill for 10 seconds.`;
   }, [activePreset.title, configuredKeys, countdownLeft, hasValidKeyConfig, keyCaptureTarget, result, selectedMode, sessionState]);
 
   const finishRun = useCallback(() => {
@@ -187,9 +200,7 @@ export default function HomePage() {
   }, []);
 
   useEffect(() => {
-    if (sessionState !== "countdown") {
-      return;
-    }
+    if (sessionState !== "countdown") return;
 
     const timer = window.setTimeout(() => {
       if (countdownLeft <= 1) {
@@ -199,7 +210,6 @@ export default function HomePage() {
         runningRef.current = true;
         return;
       }
-
       setCountdownLeft((current) => current - 1);
     }, 1000);
 
@@ -207,21 +217,15 @@ export default function HomePage() {
   }, [countdownLeft, sessionState]);
 
   useEffect(() => {
-    if (sessionState !== "running") {
-      return;
-    }
+    if (sessionState !== "running") return;
 
     const interval = window.setInterval(() => {
-      if (!deadlineRef.current) {
-        return;
-      }
-
+      if (!deadlineRef.current) return;
       const remainingMs = deadlineRef.current - Date.now();
       if (remainingMs <= 0) {
         finishRun();
         return;
       }
-
       setTimeLeft(Number((remainingMs / 1000).toFixed(1)));
     }, 50);
 
@@ -230,20 +234,16 @@ export default function HomePage() {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      const pressedKey = normalizeKey(event.key);
-      if (!pressedKey) {
-        return;
-      }
-
       if (keyCaptureTarget) {
         event.preventDefault();
-
-        if (keyCaptureTarget === "primary") {
-          setPrimaryKey(pressedKey);
-        } else {
-          setSecondaryKey(pressedKey);
+        if (event.key === "Escape") {
+          setKeyCaptureTarget(null);
+          return;
         }
-
+        const pressedKey = normalizeKey(event.key);
+        if (!pressedKey) return;
+        if (keyCaptureTarget === "primary") setPrimaryKey(pressedKey);
+        else setSecondaryKey(pressedKey);
         setKeyCaptureTarget(null);
         runningRef.current = false;
         deadlineRef.current = null;
@@ -252,9 +252,9 @@ export default function HomePage() {
         return;
       }
 
-      if (!runningRef.current || !hasValidKeyConfig || !configuredKeys.includes(pressedKey)) {
-        return;
-      }
+      const pressedKey = normalizeKey(event.key);
+      if (!pressedKey) return;
+      if (!runningRef.current || !hasValidKeyConfig || !configuredKeys.includes(pressedKey)) return;
 
       event.preventDefault();
       setLatestInput(pressedKey);
@@ -291,10 +291,7 @@ export default function HomePage() {
   }, [configuredKeys, hasValidKeyConfig, keyCaptureTarget, lastAcceptedKey, resetStats]);
 
   function startRun() {
-    if (selectedMode !== "measure" || !hasValidKeyConfig) {
-      return;
-    }
-
+    if (selectedMode !== "measure" || !hasValidKeyConfig || keyCaptureTarget !== null) return;
     resetStats();
     setSessionState("countdown");
   }
@@ -328,12 +325,7 @@ export default function HomePage() {
     resetStats();
   }
 
-  const statusTone =
-    sessionState === "running"
-      ? "running"
-      : sessionState === "finished"
-        ? "finished"
-        : "idle";
+  const statusTone = sessionState === "running" ? "running" : sessionState === "finished" ? "finished" : "idle";
 
   return (
     <main style={{ padding: "32px 16px 80px" }}>
@@ -348,39 +340,21 @@ export default function HomePage() {
             boxShadow: "0 20px 80px rgba(0, 0, 0, 0.28)",
           }}
         >
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
-              gap: 20,
-              alignItems: "end",
-            }}
-          >
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 20, alignItems: "end" }}>
             <div>
-              <p style={{ color: "var(--accent-strong)", margin: 0, fontWeight: 700, letterSpacing: "0.08em" }}>
-                TRILL LAB
-              </p>
-              <h1 style={{ fontSize: "clamp(2.2rem, 5vw, 4.5rem)", margin: "12px 0 14px" }}>
-                트릴을 재고, 버티고, 익히는 연습실
-              </h1>
+              <p style={{ color: "var(--accent-strong)", margin: 0, fontWeight: 700, letterSpacing: "0.08em" }}>TRILL LAB</p>
+              <h1 style={{ fontSize: "clamp(2.2rem, 5vw, 4.5rem)", margin: "12px 0 14px" }}>Measure it, hold it, train it</h1>
               <p style={{ color: "var(--muted)", margin: 0, lineHeight: 1.8, maxWidth: 680 }}>
-                이제 측정 모드는 단순 A/L 고정이 아니라, <strong>왼손 / 오른손 / 양손</strong>으로 세분화되고 원하는 키로 직접
-                맞출 수 있어요. 먼저 손 세팅을 고르고, 그 다음 실제 한계 BPM을 재는 흐름으로 다듬었습니다.
+                Measure Mode now supports <strong>Left Hand / Right Hand / Both Hands</strong> presets and custom key binding.
+                Pick your setup first, then test your actual speed ceiling.
               </p>
             </div>
-            <div
-              style={{
-                border: "1px solid var(--line)",
-                borderRadius: 24,
-                padding: 20,
-                background: "rgba(255,255,255,0.03)",
-              }}
-            >
-              <p style={{ marginTop: 0, color: "var(--muted)" }}>현재 포지션</p>
+            <div style={{ border: "1px solid var(--line)", borderRadius: 24, padding: 20, background: "rgba(255,255,255,0.03)" }}>
+              <p style={{ marginTop: 0, color: "var(--muted)" }}>Current status</p>
               <div style={{ display: "grid", gap: 10 }}>
-                <QuickStat label="활성 모드" value={selectedCard.title} />
-                <QuickStat label="측정 세부 모드" value={activePreset.title} />
-                <QuickStat label="사용 키" value={`${configuredKeys[0] || "_"} / ${configuredKeys[1] || "_"}`} />
+                <QuickStat label="Active mode" value={selectedCard.title} />
+                <QuickStat label="Measure preset" value={activePreset.title} />
+                <QuickStat label="Keys" value={`${configuredKeys[0] || "_"} / ${configuredKeys[1] || "_"}`} />
               </div>
             </div>
           </div>
@@ -389,7 +363,6 @@ export default function HomePage() {
         <section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 16 }}>
           {MODE_CARDS.map((card) => {
             const isActive = card.key === selectedMode;
-
             return (
               <button
                 key={card.key}
@@ -406,18 +379,8 @@ export default function HomePage() {
                 }}
               >
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
-                  <span style={{ color: "var(--accent-strong)", fontWeight: 700, letterSpacing: "0.06em" }}>
-                    {card.eyebrow}
-                  </span>
-                  <span
-                    style={{
-                      borderRadius: 999,
-                      padding: "6px 10px",
-                      fontSize: 12,
-                      fontWeight: 700,
-                      background: isActive ? "rgba(100, 245, 231, 0.16)" : "rgba(255,255,255,0.06)",
-                    }}
-                  >
+                  <span style={{ color: "var(--accent-strong)", fontWeight: 700, letterSpacing: "0.06em" }}>{card.eyebrow}</span>
+                  <span style={{ borderRadius: 999, padding: "6px 10px", fontSize: 12, fontWeight: 700, background: isActive ? "rgba(100, 245, 231, 0.16)" : "rgba(255,255,255,0.06)" }}>
                     {card.status}
                   </span>
                 </div>
@@ -434,19 +397,10 @@ export default function HomePage() {
         </section>
 
         <section style={{ display: "grid", gridTemplateColumns: "1.3fr 0.9fr", gap: 20 }}>
-          <article
-            style={{
-              background: "var(--panel-strong)",
-              border: "1px solid var(--line)",
-              borderRadius: 28,
-              padding: 24,
-              display: "grid",
-              gap: 18,
-            }}
-          >
+          <article style={{ background: "var(--panel-strong)", border: "1px solid var(--line)", borderRadius: 28, padding: 24, display: "grid", gap: 18 }}>
             <div style={{ display: "flex", justifyContent: "space-between", gap: 16, alignItems: "start", flexWrap: "wrap" }}>
               <div>
-                <p style={{ color: "var(--muted)", margin: 0 }}>현재 선택된 모드</p>
+                <p style={{ color: "var(--muted)", margin: 0 }}>Selected mode</p>
                 <h3 style={{ margin: "8px 0 10px", fontSize: 32 }}>{selectedCard.title}</h3>
                 <p style={{ color: "var(--muted)", margin: 0, lineHeight: 1.8 }}>{helperText}</p>
               </div>
@@ -457,12 +411,7 @@ export default function HomePage() {
                   gap: 10,
                   borderRadius: 999,
                   padding: "8px 14px",
-                  background:
-                    statusTone === "running"
-                      ? "rgba(57, 197, 187, 0.14)"
-                      : statusTone === "finished"
-                        ? "rgba(100, 245, 231, 0.14)"
-                        : "rgba(255, 255, 255, 0.06)",
+                  background: statusTone === "running" ? "rgba(57, 197, 187, 0.14)" : statusTone === "finished" ? "rgba(100, 245, 231, 0.14)" : "rgba(255, 255, 255, 0.06)",
                   border: "1px solid var(--line)",
                   fontWeight: 700,
                   height: "fit-content",
@@ -476,28 +425,20 @@ export default function HomePage() {
                       ? `RUNNING ${timeLeft.toFixed(1)}s`
                       : sessionState === "finished"
                         ? "FINISHED"
-                        : "READY"}
+                        : keyCaptureTarget
+                          ? "LISTENING"
+                          : "READY"}
               </div>
             </div>
 
             {selectedMode === "measure" ? (
               <>
-                <div
-                  style={{
-                    borderRadius: 22,
-                    padding: 20,
-                    border: "1px solid var(--line)",
-                    background: "rgba(255,255,255,0.02)",
-                    display: "grid",
-                    gap: 18,
-                  }}
-                >
+                <div style={{ borderRadius: 22, padding: 20, border: "1px solid var(--line)", background: "rgba(255,255,255,0.02)", display: "grid", gap: 18 }}>
                   <div>
-                    <p style={{ color: "var(--muted)", marginTop: 0 }}>손 세부 모드</p>
+                    <p style={{ color: "var(--muted)", marginTop: 0 }}>Hand preset</p>
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 }}>
                       {MEASURE_PRESETS.map((preset) => {
                         const isActive = preset.key === measureVariant;
-
                         return (
                           <button
                             key={preset.key}
@@ -522,29 +463,27 @@ export default function HomePage() {
                   </div>
 
                   <div>
-                    <p style={{ color: "var(--muted)", marginTop: 0 }}>키 설정</p>
+                    <p style={{ color: "var(--muted)", marginTop: 0 }}>Key binding</p>
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 }}>
                       <KeySettingCard
-                        label="첫 번째 키"
+                        label="Primary key"
                         value={primaryKey}
-                        hint={measureVariant === "left" ? "예: A" : measureVariant === "right" ? "예: K" : "예: A"}
+                        hint={measureVariant === "left" ? "Example: A" : measureVariant === "right" ? "Example: K" : "Example: A"}
                         isCapturing={keyCaptureTarget === "primary"}
                         onStartCapture={() => beginKeyCapture("primary")}
                         disabled={sessionState === "countdown" || sessionState === "running"}
                       />
                       <KeySettingCard
-                        label="두 번째 키"
+                        label="Secondary key"
                         value={secondaryKey}
-                        hint={measureVariant === "left" ? "예: S" : measureVariant === "right" ? "예: L" : "예: L"}
+                        hint={measureVariant === "left" ? "Example: S" : measureVariant === "right" ? "Example: L" : "Example: L"}
                         isCapturing={keyCaptureTarget === "secondary"}
                         onStartCapture={() => beginKeyCapture("secondary")}
                         disabled={sessionState === "countdown" || sessionState === "running"}
                       />
                     </div>
                     <p style={{ color: hasValidKeyConfig ? "var(--muted)" : "var(--danger)", marginBottom: 0, marginTop: 12 }}>
-                      {hasValidKeyConfig
-                        ? `현재 ${configuredKeys[0]} / ${configuredKeys[1]} 조합으로 측정해요.`
-                        : "서로 다른 두 키를 입력해야 측정을 시작할 수 있어요."}
+                      {hasValidKeyConfig ? `Current setup: ${configuredKeys[0]} / ${configuredKeys[1]}.` : "Choose two different keys before starting."}
                     </p>
                   </div>
                 </div>
@@ -564,91 +503,60 @@ export default function HomePage() {
                       opacity: hasValidKeyConfig ? 1 : 0.5,
                     }}
                   >
-                    {result ? "다시 측정하기" : "측정 시작"}
+                    {result ? "Run again" : "Start test"}
                   </button>
                 </div>
 
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 }}>
-                  <Stat label="마지막 입력" value={latestInput} />
-                  <Stat label="유효 입력" value={String(validHits)} />
-                  <Stat label="무효 입력" value={String(invalidHits)} />
-                  <Stat label="현재 스트릭" value={String(currentStreak)} />
-                  <Stat label="최대 스트릭" value={String(peakStreak)} />
+                  <Stat label="Last input" value={latestInput} />
+                  <Stat label="Valid hits" value={String(validHits)} />
+                  <Stat label="Invalid hits" value={String(invalidHits)} />
+                  <Stat label="Current streak" value={String(currentStreak)} />
+                  <Stat label="Best streak" value={String(peakStreak)} />
                 </div>
 
-                <div
-                  style={{
-                    borderRadius: 22,
-                    padding: 20,
-                    border: "1px solid var(--line)",
-                    background: "rgba(255,255,255,0.02)",
-                  }}
-                >
-                  <p style={{ color: "var(--muted)", marginTop: 0 }}>결과</p>
+                <div style={{ borderRadius: 22, padding: 20, border: "1px solid var(--line)", background: "rgba(255,255,255,0.02)" }}>
+                  <p style={{ color: "var(--muted)", marginTop: 0 }}>Result</p>
                   <h2 style={{ margin: "0 0 8px", fontSize: "clamp(1.8rem, 4vw, 3rem)" }}>
-                    {result ? `현재 기록: 16비트 트릴 기준 ${result.bpm} BPM` : "아직 기록이 없어요"}
+                    {result ? `Current result: ${result.bpm} BPM (16th-note trill)` : "No result yet"}
                   </h2>
                   <p style={{ color: "var(--muted)", marginBottom: 0 }}>
                     {result
-                      ? `${activePreset.title} · ${configuredKeys[0]} / ${configuredKeys[1]} · 정확도 ${formatPercent(result.accuracy)} · 유효 ${result.validHits} · 무효 ${result.invalidHits} · 최대 스트릭 ${result.peakStreak}`
-                      : "측정이 끝나면 BPM / 정확도 / 스트릭이 함께 표시됩니다."}
+                      ? `${activePreset.title} · ${configuredKeys[0]} / ${configuredKeys[1]} · Accuracy ${formatPercent(result.accuracy)} · Valid ${result.validHits} · Invalid ${result.invalidHits} · Best streak ${result.peakStreak}`
+                      : "BPM, accuracy, and streak stats will appear after the run."}
                   </p>
                 </div>
               </>
             ) : (
-              <div
-                style={{
-                  borderRadius: 22,
-                  padding: 24,
-                  border: "1px dashed var(--line)",
-                  background: "rgba(255,255,255,0.02)",
-                  color: "var(--muted)",
-                  lineHeight: 1.8,
-                }}
-              >
+              <div style={{ borderRadius: 22, padding: 24, border: "1px dashed var(--line)", background: "rgba(255,255,255,0.02)", color: "var(--muted)", lineHeight: 1.8 }}>
                 <strong style={{ color: "var(--text)" }}>{selectedCard.title}</strong>
                 <p style={{ marginBottom: 0 }}>
-                  여기에는 각 모드 전용 플레이 UI가 들어갈 예정이에요. 지금은 전체 제품 구조를 먼저 맞추기 위해
-                  카드형 선택 영역 + 메인 플레이 패널 + 우측 보조 패널 레이아웃을 먼저 잡아둔 상태예요.
+                  Each mode will get its own dedicated play UI here. For now, the product structure comes first: mode cards, the main play panel,
+                  and a supporting side panel.
                 </p>
               </div>
             )}
           </article>
 
           <aside style={{ display: "grid", gap: 20 }}>
-            <article
-              style={{
-                background: "var(--panel-strong)",
-                border: "1px solid var(--line)",
-                borderRadius: 28,
-                padding: 24,
-              }}
-            >
-              <p style={{ color: "var(--muted)", marginTop: 0 }}>설계 메모</p>
-              <h3 style={{ margin: "8px 0 14px" }}>측정 모드 개편 포인트</h3>
+            <article style={{ background: "var(--panel-strong)", border: "1px solid var(--line)", borderRadius: 28, padding: 24 }}>
+              <p style={{ color: "var(--muted)", marginTop: 0 }}>Design notes</p>
+              <h3 style={{ margin: "8px 0 14px" }}>Measure Mode updates</h3>
               <ul style={{ paddingLeft: 20, color: "var(--muted)", lineHeight: 1.8, marginBottom: 0 }}>
-                <li>왼손 / 오른손 / 양손을 독립 preset으로 분리</li>
-                <li>preset 선택 후 원하는 키를 눌러 즉시 바인딩 가능</li>
-                <li>입력 키가 겹치면 측정 시작 비활성화</li>
-                <li>이후 도전/연습 모드도 같은 키 세팅 구조를 재사용 가능</li>
+                <li>Left / Right / Both Hands are split into separate presets</li>
+                <li>After choosing a preset, press any key to bind instantly</li>
+                <li>The start button is disabled when both keys are the same</li>
+                <li>The same binding flow can be reused for Challenge and Practice Mode later</li>
               </ul>
             </article>
 
-            <article
-              style={{
-                background: "var(--panel-strong)",
-                border: "1px solid var(--line)",
-                borderRadius: 28,
-                padding: 24,
-                color: "var(--muted)",
-              }}
-            >
-              <p style={{ color: "var(--muted)", marginTop: 0 }}>측정 규칙</p>
+            <article style={{ background: "var(--panel-strong)", border: "1px solid var(--line)", borderRadius: 28, padding: 24, color: "var(--muted)" }}>
+              <p style={{ color: "var(--muted)", marginTop: 0 }}>Rules</p>
               <ul style={{ paddingLeft: 20, marginBottom: 0, lineHeight: 1.8 }}>
-                <li>설정한 두 키만 측정합니다.</li>
-                <li>반드시 두 키를 번갈아 입력해야 valid hit로 인정됩니다.</li>
-                <li>같은 키를 연속으로 누르면 invalid hit로 기록되고 스트릭이 끊깁니다.</li>
-                <li>키 설정을 바꾸면 현재 세션은 초기화돼요.</li>
+                <li>Only the two selected keys are counted.</li>
+                <li>You must alternate between them for a valid hit.</li>
+                <li>Repeating the same key becomes an invalid hit and breaks the streak.</li>
+                <li>Changing a key binding resets the current session.</li>
               </ul>
             </article>
           </aside>
@@ -660,16 +568,7 @@ export default function HomePage() {
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div
-      style={{
-        display: "grid",
-        gap: 8,
-        padding: "14px 16px",
-        borderRadius: 16,
-        border: "1px solid var(--line)",
-        background: "rgba(255, 255, 255, 0.02)",
-      }}
-    >
+    <div style={{ display: "grid", gap: 8, padding: "14px 16px", borderRadius: 16, border: "1px solid var(--line)", background: "rgba(255, 255, 255, 0.02)" }}>
       <span style={{ color: "var(--muted)", fontSize: 14 }}>{label}</span>
       <strong style={{ fontSize: 22 }}>{value}</strong>
     </div>
@@ -678,18 +577,7 @@ function Stat({ label, value }: { label: string; value: string }) {
 
 function QuickStat({ label, value }: { label: string; value: string }) {
   return (
-    <div
-      style={{
-        display: "flex",
-        justifyContent: "space-between",
-        gap: 12,
-        alignItems: "center",
-        padding: "12px 14px",
-        borderRadius: 16,
-        border: "1px solid var(--line)",
-        background: "rgba(255,255,255,0.02)",
-      }}
-    >
+    <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", padding: "12px 14px", borderRadius: 16, border: "1px solid var(--line)", background: "rgba(255,255,255,0.02)" }}>
       <span style={{ color: "var(--muted)" }}>{label}</span>
       <strong>{value}</strong>
     </div>
@@ -737,7 +625,7 @@ function KeySettingCard({
           alignItems: "center",
         }}
       >
-        {value || "-"}
+        {normalizeKey(value) || "-"}
       </div>
       <button
         type="button"
@@ -754,10 +642,10 @@ function KeySettingCard({
           opacity: disabled ? 0.5 : 1,
         }}
       >
-        {isCapturing ? "아무 키나 눌러주세요..." : "키 변경하기"}
+        {isCapturing ? "Press any key..." : "Change key"}
       </button>
       <span style={{ color: "var(--muted)", fontSize: 13 }}>
-        {isCapturing ? "다음 키 입력을 바로 이 슬롯에 저장해요." : hint}
+        {isCapturing ? "The next key press will be saved to this slot. Press ESC to cancel." : hint}
       </span>
     </div>
   );

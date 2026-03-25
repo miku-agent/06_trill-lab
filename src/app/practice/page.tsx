@@ -461,6 +461,8 @@ export default function PracticePage() {
   }, [stopLoop]);
 
   const accuracy = getAccuracy(stats);
+  const judgedNotes = stats.perfect + stats.good + stats.miss;
+  const remainingNotes = Math.max(0, stats.totalNotes - judgedNotes);
   const remainingSeconds =
     config.endMode === "timed"
       ? Math.max(0, Math.ceil((config.duration * 1000 + LEAD_IN_MS - elapsedMs) / 1000))
@@ -769,8 +771,29 @@ export default function PracticePage() {
               </div>
             </div>
 
+            <div className="practice-judgment-number-grid">
+              <article className="practice-judgment-number-card is-perfect">
+                <span>PERFECT</span>
+                <strong>{stats.perfect}</strong>
+              </article>
+              <article className="practice-judgment-number-card is-good">
+                <span>GOOD</span>
+                <strong>{stats.good}</strong>
+              </article>
+              <article className="practice-judgment-number-card is-miss">
+                <span>MISS</span>
+                <strong>{stats.miss}</strong>
+              </article>
+              <article className="practice-judgment-number-card is-total">
+                <span>JUDGED / TOTAL</span>
+                <strong>{judgedNotes} / {stats.totalNotes}</strong>
+              </article>
+            </div>
+
             <div className={`practice-judgment-toast${lastFeedback ? ` is-${lastFeedback.tone}` : ""}`}>
-              {lastFeedback?.label ?? "READY"}
+              <span className="practice-judgment-toast-label">LAST</span>
+              <strong>{lastFeedback?.label ?? "READY"}</strong>
+              <small>{remainingNotes > 0 ? `남은 노트 ${remainingNotes}` : "모든 노트 판정 완료"}</small>
             </div>
 
             {gameState === "ended" && (
@@ -1094,15 +1117,76 @@ export default function PracticePage() {
           font-size: 1.15rem;
         }
 
+        .practice-judgment-number-grid {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 10px;
+        }
+
+        .practice-judgment-number-card {
+          border-radius: 18px;
+          border: 1px solid var(--line);
+          background: rgba(255, 255, 255, 0.04);
+          padding: 14px;
+          display: grid;
+          gap: 6px;
+        }
+
+        .practice-judgment-number-card span {
+          color: var(--muted);
+          font-size: 11px;
+          font-weight: 800;
+          letter-spacing: 0.08em;
+        }
+
+        .practice-judgment-number-card strong {
+          font-size: 1.5rem;
+          line-height: 1;
+        }
+
+        .practice-judgment-number-card.is-perfect strong {
+          color: #ffe27a;
+        }
+
+        .practice-judgment-number-card.is-good strong {
+          color: var(--accent-strong);
+        }
+
+        .practice-judgment-number-card.is-miss strong {
+          color: var(--danger);
+        }
+
+        .practice-judgment-number-card.is-total strong {
+          color: #eefcff;
+          font-size: 1.2rem;
+        }
+
         .practice-judgment-toast {
           border-radius: 18px;
           padding: 16px;
           text-align: center;
-          font-size: 1.35rem;
-          font-weight: 900;
-          letter-spacing: 0.08em;
           background: rgba(255, 255, 255, 0.04);
           border: 1px solid var(--line);
+          color: var(--muted);
+          display: grid;
+          gap: 6px;
+        }
+
+        .practice-judgment-toast-label {
+          font-size: 11px;
+          font-weight: 800;
+          letter-spacing: 0.12em;
+          color: var(--muted);
+        }
+
+        .practice-judgment-toast strong {
+          font-size: 1.5rem;
+          line-height: 1;
+          letter-spacing: 0.08em;
+        }
+
+        .practice-judgment-toast small {
+          font-size: 12px;
           color: var(--muted);
         }
 

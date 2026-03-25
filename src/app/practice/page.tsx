@@ -277,27 +277,22 @@ export default function PracticePage() {
 
   const applyJudgment = useCallback(
     (noteId: number, judgment: JudgmentType, lane: LaneIndex) => {
-      let applied = false;
+      const noteIndex = notesRef.current.findIndex((note) => note.id === noteId && !note.judged);
 
-      setNotes((prev) => {
-        const next = prev.map((note) => {
-          if (note.id !== noteId || note.judged) {
-            return note;
-          }
+      if (noteIndex < 0) return false;
 
-          applied = true;
-          return {
-            ...note,
-            judged: true,
-            judgment,
-          };
-        });
+      const nextNotes = notesRef.current.map((note, index) =>
+        index === noteIndex
+          ? {
+              ...note,
+              judged: true,
+              judgment,
+            }
+          : note,
+      );
 
-        notesRef.current = next;
-        return next;
-      });
-
-      if (!applied) return false;
+      notesRef.current = nextNotes;
+      setNotes(nextNotes);
 
       setStats((prev) => {
         if (judgment === "miss") {

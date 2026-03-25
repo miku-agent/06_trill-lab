@@ -454,26 +454,26 @@ export default function PracticePage() {
       triggerLanePressEffect(lane);
 
       const currentTime = performance.now() - startAtRef.current;
-      const laneNotes = notesRef.current.filter((note) => note.lane === lane && !note.judged);
-      const candidates = laneNotes
-        .map((note) => ({ note, delta: currentTime - note.time }))
-        .filter(({ delta }) => Math.abs(delta) <= MISS_WINDOW_MS)
-        .sort((a, b) => Math.abs(a.delta) - Math.abs(b.delta));
-
-      const target = candidates[0];
+      const target = notesRef.current.find((note) => note.lane === lane && !note.judged);
 
       if (!target) {
-        const nextLaneNote = laneNotes[0];
-
-        if (nextLaneNote && nextLaneNote.time - currentTime > GOOD_WINDOW_MS) {
-          showFeedback("EARLY", "early");
-        } else {
-          showFeedback("MISS", "miss");
-        }
+        showFeedback("CLEAR", "perfect");
         return;
       }
 
-      const distance = Math.abs(target.delta);
+      const delta = currentTime - target.time;
+
+      if (delta < -MISS_WINDOW_MS) {
+        showFeedback("EARLY", "early");
+        return;
+      }
+
+      if (delta > MISS_WINDOW_MS) {
+        showFeedback("LATE", "miss");
+        return;
+      }
+
+      const distance = Math.abs(delta);
       const judgment: JudgmentType =
         distance <= PERFECT_WINDOW_MS
           ? "perfect"
@@ -481,7 +481,7 @@ export default function PracticePage() {
             ? "good"
             : "miss";
 
-      const applied = applyJudgment(target.note.id, judgment, target.note.lane);
+      const applied = applyJudgment(target.id, judgment, target.lane);
       if (!applied) return;
 
       if (config.endMode === "firstMiss" && judgment === "miss") {

@@ -34,6 +34,7 @@ const COUNTDOWN_SECONDS = 3;
 const TEST_SECONDS = 10;
 const FORBIDDEN_CAPTURE_KEYS = new Set(["ESC", "TAB", "ENTER", "CMD", "CTRL", "ALT", "SHIFT"]);
 const CAPTURE_TARGETS: Exclude<KeyCaptureTarget, null>[] = ["key1", "key2", "key3", "key4"];
+const CHART_CEILING_OPTIONS = [120, 180, 240, 300] as const;
 
 const MEASURE_PRESETS: MeasurePreset[] = [
   { key: "left", title: "왼손 모드", description: "왼손 두 키로 한손 트릴을 측정해요.", defaultKeys: ["A", "S"] },
@@ -190,6 +191,7 @@ function MeasurePageContent() {
   const [currentStreak, setCurrentStreak] = useState(0);
   const [peakStreak, setPeakStreak] = useState(0);
   const [result, setResult] = useState<Result | null>(null);
+  const [chartCeiling, setChartCeiling] = useState<number | null>(180);
   const [captureError, setCaptureError] = useState<string | null>(null);
   const [activePadIndex, setActivePadIndex] = useState<number | null>(null);
   const [hitFeedback, setHitFeedback] = useState<"good" | "miss" | null>(null);
@@ -768,11 +770,36 @@ function MeasurePageContent() {
           </div>
 
           <div className="interval-chart-wrap">
-            <p className="section-label">간격 그래프</p>
+            <div className="chart-header-row">
+              <p className="section-label">간격 그래프</p>
+              <div className="chart-ceiling-controls" role="group" aria-label="그래프 상한선 선택">
+                <button
+                  type="button"
+                  className={`secondary-button chart-ceiling-button ${chartCeiling === null ? "is-selected" : ""}`}
+                  onClick={() => setChartCeiling(null)}
+                >
+                  AUTO
+                </button>
+                {CHART_CEILING_OPTIONS.map((value) => (
+                  <button
+                    key={value}
+                    type="button"
+                    className={`secondary-button chart-ceiling-button ${chartCeiling === value ? "is-selected" : ""}`}
+                    onClick={() => setChartCeiling(value)}
+                  >
+                    {value}ms
+                  </button>
+                ))}
+              </div>
+            </div>
             {result && result.intervals.length > 1 ? (
               <>
-                <IntervalChart intervals={result.intervals} />
-                <p className="section-subtitle">선이 평평할수록 더 일정한 패턴이에요.</p>
+                <IntervalChart intervals={result.intervals} ceiling={chartCeiling} />
+                <p className="section-subtitle">
+                  {chartCeiling === null
+                    ? "AUTO 스케일은 현재 기록 기준으로 확대해서 보여줘요."
+                    : `${chartCeiling}ms 상한선으로 고정해서 오늘 기록이 얼마나 안정적인지 더 쉽게 비교할 수 있어요.`}
+                </p>
               </>
             ) : (
               <p className="section-subtitle">유효 입력이 더 쌓이면 간격 그래프가 표시돼요.</p>
@@ -815,22 +842,25 @@ function RhythmPad({
   );
 }
 
-function IntervalChart({ intervals }: { intervals: number[] }) {
+function IntervalChart({ intervals, ceiling }: { intervals: number[]; ceiling: number | null }) {
   const width = 640;
   const height = 220;
   const padding = 18;
-  const min = Math.min(...intervals);
-  const max = Math.max(...intervals);
+  const min = 0;
+  const rawMax = Math.max(...intervals);
+  const max = ceiling ?? Math.max(rawMax, 1);
   const range = Math.max(max - min, 1);
+  const clampValue = (value: number) => Math.min(value, max);
+  const yFor = (value: number) => height - padding - ((clampValue(value) - min) / range) * (height - padding * 2);
   const points = intervals
     .map((value, index) => {
       const x = padding + (index / Math.max(intervals.length - 1, 1)) * (width - padding * 2);
-      const y = height - padding - ((value - min) / range) * (height - padding * 2);
+      const y = yFor(value);
       return `${x},${y}`;
     })
     .join(" ");
   const average = intervals.reduce((sum, value) => sum + value, 0) / intervals.length;
-  const averageY = height - padding - ((average - min) / range) * (height - padding * 2);
+  const averageY = yFor(average);
 
   return (
     <div className="interval-chart">
@@ -838,17 +868,18 @@ function IntervalChart({ intervals }: { intervals: number[] }) {
         <line x1={padding} y1={padding} x2={padding} y2={height - padding} className="chart-axis" />
         <line x1={padding} y1={height - padding} x2={width - padding} y2={height - padding} className="chart-axis" />
         <line x1={padding} y1={averageY} x2={width - padding} y2={averageY} className="chart-average-line" />
+        {ceiling !== null ? <text x={padding + 6} y={padding + 16} className="chart-limit-label">MAX {ceiling}ms</text> : null}
         <polyline fill="none" points={points} className="chart-line" />
         {intervals.map((value, index) => {
           const x = padding + (index / Math.max(intervals.length - 1, 1)) * (width - padding * 2);
-          const y = height - padding - ((value - min) / range) * (height - padding * 2);
+          const y = yFor(value);
           return <circle key={`${index}-${value}`} cx={x} cy={y} r="4" className="chart-point" />;
         })}
       </svg>
       <div className="chart-meta">
-        <span>최고 속도 {Math.round(min)} ms</span>
+        <span>최고 속도 {Math.round(Math.min(...intervals))} ms</span>
         <span>평균 {Math.round(average)} ms</span>
-        <span>최저 속도 {Math.round(max)} ms</span>
+        <span>{ceiling === null ? `최저 속도 ${Math.round(rawMax)} ms` : `그래프 상한 ${ceiling} ms`}</span>
       </div>
     </div>
   );

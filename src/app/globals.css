@@ -526,6 +526,29 @@ main {
   gap: 10px;
 }
 
+.chart-header-row {
+  display: grid;
+  gap: 10px;
+}
+
+.chart-ceiling-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.chart-ceiling-button {
+  padding: 8px 12px;
+  border-radius: 999px;
+  font-size: 0.85rem;
+}
+
+.chart-ceiling-button.is-selected {
+  border-color: rgba(100, 245, 231, 0.72);
+  background: rgba(57, 197, 187, 0.16);
+  color: #b4fff8;
+}
+
 .interval-chart {
   display: grid;
   gap: 10px;
@@ -549,6 +572,13 @@ main {
   stroke: rgba(255, 255, 255, 0.24);
   stroke-width: 1.5;
   stroke-dasharray: 5 5;
+}
+
+.chart-limit-label {
+  fill: rgba(180, 255, 248, 0.88);
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
 }
 
 .chart-line {

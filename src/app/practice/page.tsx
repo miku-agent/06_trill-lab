@@ -38,7 +38,7 @@ type GameStats = {
 const DEFAULT_CONFIG: GameConfig = {
   bpm: 150,
   subdivision: 4,
-  speed: 5,
+  speed: 6.5,
   endMode: "timed",
   duration: 30,
   leftKey: "a",
@@ -55,8 +55,8 @@ const MISS_WINDOW_MS = 150;
 const NOTE_HEIGHT_PX = 20;
 const RAIL_HEIGHT_PX = 520;
 const JUDGMENT_LINE_Y = 430;
-const MIN_TRAVEL_MS = 900;
-const MAX_TRAVEL_MS = 4200;
+const MIN_TRAVEL_MS = 520;
+const MAX_TRAVEL_MS = 2100;
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
@@ -99,7 +99,8 @@ function createNotes(config: GameConfig): Note[] {
 
 function getTravelMs(speed: number) {
   const normalized = clamp(speed, 0, 10) / 10;
-  return clamp(MAX_TRAVEL_MS - normalized * 2500, MIN_TRAVEL_MS, MAX_TRAVEL_MS);
+  const eased = Math.pow(normalized, 0.78);
+  return Math.round(clamp(MAX_TRAVEL_MS - eased * (MAX_TRAVEL_MS - MIN_TRAVEL_MS), MIN_TRAVEL_MS, MAX_TRAVEL_MS));
 }
 
 function getAccuracy(stats: GameStats) {
@@ -440,6 +441,7 @@ export default function PracticePage() {
                 }
                 disabled={gameState === "playing"}
               />
+              <small className="practice-field-hint">DJMAX처럼 체감 스크롤 속도 기준으로 더 빠르게 매핑했어요.</small>
             </label>
 
             <label className="practice-field">
@@ -688,6 +690,12 @@ export default function PracticePage() {
           color: var(--muted);
           font-size: 13px;
           font-weight: 700;
+        }
+
+        .practice-field-hint {
+          color: var(--muted);
+          font-size: 11px;
+          line-height: 1.45;
         }
 
         .practice-input,

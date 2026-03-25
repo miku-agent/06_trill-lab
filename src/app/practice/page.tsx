@@ -5,6 +5,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 type GameState = "idle" | "playing" | "ended";
 type EndMode = "firstMiss" | "timed";
 type JudgmentType = "perfect" | "good" | "miss";
+type FeedbackTone = JudgmentType | "early" | "wrong";
+
+type FeedbackState = {
+  label: string;
+  tone: FeedbackTone;
+};
 type LaneIndex = 0 | 1 | 2 | 3;
 type KeyCaptureTarget = "left" | "right" | null;
 
@@ -168,7 +174,7 @@ export default function PracticePage() {
     totalNotes: 0,
   });
   const [elapsedMs, setElapsedMs] = useState(0);
-  const [lastJudgment, setLastJudgment] = useState<JudgmentType | null>(null);
+  const [lastFeedback, setLastFeedback] = useState<FeedbackState | null>(null);
   const [keyCaptureTarget, setKeyCaptureTarget] = useState<KeyCaptureTarget>(null);
   const [hitEffects, setHitEffects] = useState<HitEffect[]>([]);
 
@@ -177,6 +183,7 @@ export default function PracticePage() {
   const notesRef = useRef<Note[]>([]);
   const lastJudgmentTimeoutRef = useRef<number | null>(null);
   const hitEffectIdRef = useRef(0);
+  const lastAcceptedLaneRef = useRef<LaneIndex | null>(null);
 
   const travelMs = useMemo(() => getTravelMs(config.speed), [config.speed]);
   const beatGuideLines = useMemo(() => createBeatGuideLines(config), [config]);
@@ -198,17 +205,17 @@ export default function PracticePage() {
     }, HIT_EFFECT_DURATION_MS);
   }, []);
 
-  const resetJudgmentToast = useCallback((judgment: JudgmentType) => {
-    setLastJudgment(judgment);
+  const showFeedback = useCallback((label: string, tone: FeedbackTone) => {
+    setLastFeedback({ label, tone });
 
     if (lastJudgmentTimeoutRef.current !== null) {
       window.clearTimeout(lastJudgmentTimeoutRef.current);
     }
 
     lastJudgmentTimeoutRef.current = window.setTimeout(() => {
-      setLastJudgment(null);
+      setLastFeedback(null);
       lastJudgmentTimeoutRef.current = null;
-    }, 280);
+    }, 320);
   }, []);
 
   const finishGame = useCallback(() => {
@@ -259,14 +266,20 @@ export default function PracticePage() {
         };
       });
 
+      if (judgment !== "miss") {
+        lastAcceptedLaneRef.current = lane;
+      } else {
+        lastAcceptedLaneRef.current = null;
+      }
+
       if (judgment === "perfect") {
         spawnHitEffect(lane);
       }
 
-      resetJudgmentToast(judgment);
+      showFeedback(judgment.toUpperCase(), judgment);
       return true;
     },
-    [resetJudgmentToast, spawnHitEffect],
+    [showFeedback, spawnHitEffect],
   );
 
   const startGame = useCallback(() => {
@@ -282,8 +295,9 @@ export default function PracticePage() {
       totalNotes: nextNotes.length,
     });
     setElapsedMs(0);
-    setLastJudgment(null);
+    setLastFeedback(null);
     setHitEffects([]);
+    lastAcceptedLaneRef.current = null;
     setGameState("playing");
     startAtRef.current = performance.now();
   }, [config]);
@@ -293,8 +307,9 @@ export default function PracticePage() {
     notesRef.current = [];
     setElapsedMs(0);
     setNotes([]);
-    setLastJudgment(null);
+    setLastFeedback(null);
     setHitEffects([]);
+    lastAcceptedLaneRef.current = null;
     setStats({
       combo: 0,
       maxCombo: 0,
@@ -386,14 +401,34 @@ export default function PracticePage() {
       event.preventDefault();
 
       const currentTime = performance.now() - startAtRef.current;
-      const candidates = notesRef.current
-        .filter((note) => note.lane === lane && !note.judged)
+      const unresolvedNotes = notesRef.current.filter((note) => !note.judged);
+      const candidates = unresolvedNotes
         .map((note) => ({ note, delta: currentTime - note.time }))
         .filter(({ delta }) => Math.abs(delta) <= MISS_WINDOW_MS)
         .sort((a, b) => Math.abs(a.delta) - Math.abs(b.delta));
 
       const target = candidates[0];
-      if (!target) return;
+
+      if (!target) {
+        const nextNote = unresolvedNotes[0];
+
+        if (nextNote && nextNote.time - currentTime > GOOD_WINDOW_MS) {
+          showFeedback("EARLY", "early");
+        } else {
+          showFeedback("MISS", "miss");
+        }
+        return;
+      }
+
+      if (target.note.lane !== lane) {
+        showFeedback("WRONG", "wrong");
+        return;
+      }
+
+      if (lastAcceptedLaneRef.current === lane) {
+        showFeedback("WRONG", "wrong");
+        return;
+      }
 
       const distance = Math.abs(target.delta);
       const judgment: JudgmentType =
@@ -413,7 +448,7 @@ export default function PracticePage() {
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [applyJudgment, config.leftKey, config.rightKey, config.endMode, finishGame, gameState, keyCaptureTarget]);
+  }, [applyJudgment, config.leftKey, config.rightKey, config.endMode, finishGame, gameState, keyCaptureTarget, showFeedback]);
 
   useEffect(() => {
     return () => {
@@ -731,14 +766,8 @@ export default function PracticePage() {
               </div>
             </div>
 
-            <div className={`practice-judgment-toast${lastJudgment ? ` is-${lastJudgment}` : ""}`}>
-              {lastJudgment === "perfect"
-                ? "PERFECT"
-                : lastJudgment === "good"
-                  ? "GOOD"
-                  : lastJudgment === "miss"
-                    ? "MISS"
-                    : "READY"}
+            <div className={`practice-judgment-toast${lastFeedback ? ` is-${lastFeedback.tone}` : ""}`}>
+              {lastFeedback?.label ?? "READY"}
             </div>
 
             {gameState === "ended" && (
@@ -1061,6 +1090,16 @@ export default function PracticePage() {
         .practice-judgment-toast.is-miss {
           color: var(--danger);
           border-color: rgba(255, 122, 144, 0.4);
+        }
+
+        .practice-judgment-toast.is-early {
+          color: #d9dcff;
+          border-color: rgba(169, 178, 255, 0.35);
+        }
+
+        .practice-judgment-toast.is-wrong {
+          color: #ffb86b;
+          border-color: rgba(255, 184, 107, 0.38);
         }
 
         @media (max-width: 980px) {

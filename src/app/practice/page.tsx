@@ -22,9 +22,16 @@ type BeatGuideLine = {
   isMeasure: boolean;
 };
 
+type NoteSubdivision = 1 | 2 | 4 | 8 | 16 | 32;
+
+type HitEffect = {
+  id: number;
+  lane: LaneIndex;
+};
+
 type GameConfig = {
   bpm: number;
-  subdivision: 1 | 2 | 4 | 8;
+  subdivision: NoteSubdivision;
   speed: number;
   endMode: EndMode;
   duration: number;
@@ -60,9 +67,11 @@ const GOOD_WINDOW_MS = 95;
 const MISS_WINDOW_MS = 150;
 const NOTE_HEIGHT_PX = 20;
 const RAIL_HEIGHT_PX = 520;
+const NOTE_SPAWN_Y = 24;
 const JUDGMENT_LINE_Y = 430;
-const MIN_TRAVEL_MS = 520;
-const MAX_TRAVEL_MS = 2100;
+const HIT_EFFECT_DURATION_MS = 260;
+const MIN_TRAVEL_MS = 260;
+const MAX_TRAVEL_MS = 1050;
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
@@ -80,6 +89,10 @@ function getTimelineTotalMs(config: GameConfig) {
   return config.endMode === "timed"
     ? config.duration * 1000 + LEAD_IN_MS + intervalMs * 2
     : 60000;
+}
+
+function getTimelineCenterY(noteTime: number, elapsedMs: number, travelMs: number) {
+  return JUDGMENT_LINE_Y - ((noteTime - elapsedMs) / travelMs) * (JUDGMENT_LINE_Y - NOTE_SPAWN_Y);
 }
 
 function createNotes(config: GameConfig): Note[] {
@@ -157,11 +170,13 @@ export default function PracticePage() {
   const [elapsedMs, setElapsedMs] = useState(0);
   const [lastJudgment, setLastJudgment] = useState<JudgmentType | null>(null);
   const [keyCaptureTarget, setKeyCaptureTarget] = useState<KeyCaptureTarget>(null);
+  const [hitEffects, setHitEffects] = useState<HitEffect[]>([]);
 
   const startAtRef = useRef(0);
   const rafRef = useRef<number | null>(null);
   const notesRef = useRef<Note[]>([]);
   const lastJudgmentTimeoutRef = useRef<number | null>(null);
+  const hitEffectIdRef = useRef(0);
 
   const travelMs = useMemo(() => getTravelMs(config.speed), [config.speed]);
   const beatGuideLines = useMemo(() => createBeatGuideLines(config), [config]);
@@ -171,6 +186,16 @@ export default function PracticePage() {
       cancelAnimationFrame(rafRef.current);
       rafRef.current = null;
     }
+  }, []);
+
+  const spawnHitEffect = useCallback((lane: LaneIndex) => {
+    const id = hitEffectIdRef.current++;
+
+    setHitEffects((prev) => [...prev, { id, lane }]);
+
+    window.setTimeout(() => {
+      setHitEffects((prev) => prev.filter((effect) => effect.id !== id));
+    }, HIT_EFFECT_DURATION_MS);
   }, []);
 
   const resetJudgmentToast = useCallback((judgment: JudgmentType) => {
@@ -192,7 +217,7 @@ export default function PracticePage() {
   }, [stopLoop]);
 
   const applyJudgment = useCallback(
-    (noteId: number, judgment: JudgmentType) => {
+    (noteId: number, judgment: JudgmentType, lane: LaneIndex) => {
       let applied = false;
 
       setNotes((prev) => {
@@ -234,10 +259,14 @@ export default function PracticePage() {
         };
       });
 
+      if (judgment === "perfect") {
+        spawnHitEffect(lane);
+      }
+
       resetJudgmentToast(judgment);
       return true;
     },
-    [resetJudgmentToast],
+    [resetJudgmentToast, spawnHitEffect],
   );
 
   const startGame = useCallback(() => {
@@ -254,6 +283,7 @@ export default function PracticePage() {
     });
     setElapsedMs(0);
     setLastJudgment(null);
+    setHitEffects([]);
     setGameState("playing");
     startAtRef.current = performance.now();
   }, [config]);
@@ -264,6 +294,7 @@ export default function PracticePage() {
     setElapsedMs(0);
     setNotes([]);
     setLastJudgment(null);
+    setHitEffects([]);
     setStats({
       combo: 0,
       maxCombo: 0,
@@ -292,7 +323,7 @@ export default function PracticePage() {
 
       if (staleMisses.length > 0) {
         staleMisses.forEach((note) => {
-          applyJudgment(note.id, "miss");
+          applyJudgment(note.id, "miss", note.lane);
         });
 
         if (config.endMode === "firstMiss") {
@@ -372,7 +403,7 @@ export default function PracticePage() {
             ? "good"
             : "miss";
 
-      const applied = applyJudgment(target.note.id, judgment);
+      const applied = applyJudgment(target.note.id, judgment, target.note.lane);
       if (!applied) return;
 
       if (config.endMode === "firstMiss" && judgment === "miss") {
@@ -443,7 +474,7 @@ export default function PracticePage() {
             </label>
 
             <label className="practice-field">
-              <span>박자 분할</span>
+              <span>비트</span>
               <select
                 className="practice-input"
                 value={config.subdivision}
@@ -459,6 +490,8 @@ export default function PracticePage() {
                 <option value={2}>2</option>
                 <option value={4}>4</option>
                 <option value={8}>8</option>
+                <option value={16}>16</option>
+                <option value={32}>32</option>
               </select>
             </label>
 
@@ -476,7 +509,7 @@ export default function PracticePage() {
                 }
                 disabled={gameState === "playing"}
               />
-              <small className="practice-field-hint">DJMAX처럼 체감 스크롤 속도 기준으로 더 빠르게 매핑했어요.</small>
+              <small className="practice-field-hint">같은 속도 값이어도 이전보다 2배 빠르게 떨어지도록 조정했어요.</small>
             </label>
 
             <label className="practice-field">
@@ -560,15 +593,15 @@ export default function PracticePage() {
                 <h2 className="section-title">4레인 트릴 레일</h2>
               </div>
               <div className="practice-badge-row">
-                <span className="practice-badge">ACTIVE: 2 / 3 레인</span>
+                <span className="practice-badge">ACTIVE: 2 / 4 레인</span>
                 <span className="practice-badge">NOTE WIDTH: FULL</span>
-                <span className="practice-badge">BEAT LINE: 1/4</span>
+                <span className="practice-badge">BEAT LINE: 1/4 · 비트 {config.subdivision}</span>
               </div>
             </div>
 
             <div className="practice-rail" style={{ height: `${RAIL_HEIGHT_PX}px` }}>
               {beatGuideLines.map((line) => {
-                const y = JUDGMENT_LINE_Y - ((line.time - elapsedMs) / travelMs) * (JUDGMENT_LINE_Y - 24);
+                const y = getTimelineCenterY(line.time, elapsedMs, travelMs);
 
                 if (y < -4 || y > RAIL_HEIGHT_PX) {
                   return null;
@@ -604,7 +637,7 @@ export default function PracticePage() {
 
                     {laneNotes.map((note) => {
                       const y =
-                        JUDGMENT_LINE_Y - ((note.time - elapsedMs) / travelMs) * (JUDGMENT_LINE_Y - 24);
+                        getTimelineCenterY(note.time, elapsedMs, travelMs) - NOTE_HEIGHT_PX / 2;
 
                       if (y < -NOTE_HEIGHT_PX || y > RAIL_HEIGHT_PX) {
                         return null;
@@ -621,6 +654,16 @@ export default function PracticePage() {
                         />
                       );
                     })}
+
+                    {hitEffects
+                      .filter((effect) => effect.lane === lane)
+                      .map((effect) => (
+                        <div key={effect.id} className="practice-hit-effect">
+                          <span className="practice-hit-spark practice-hit-spark-center" />
+                          <span className="practice-hit-spark practice-hit-spark-left" />
+                          <span className="practice-hit-spark practice-hit-spark-right" />
+                        </div>
+                      ))}
 
                     <div className="practice-key-floor">{laneKey ? formatKeyLabel(laneKey) : ""}</div>
                   </div>
@@ -893,11 +936,57 @@ export default function PracticePage() {
           opacity: 0.45;
         }
 
+        .practice-hit-effect {
+          position: absolute;
+          left: 6px;
+          right: 6px;
+          top: ${JUDGMENT_LINE_Y}px;
+          height: 0;
+          pointer-events: none;
+          z-index: 4;
+        }
+
+        .practice-hit-spark {
+          position: absolute;
+          left: 50%;
+          top: 0;
+          width: 64px;
+          height: 6px;
+          border-radius: 999px;
+          background: linear-gradient(90deg, rgba(255, 243, 176, 0), rgba(255, 243, 176, 0.98), rgba(255, 243, 176, 0));
+          box-shadow: 0 0 18px rgba(255, 226, 122, 0.45);
+          transform-origin: center;
+          animation: practice-hit-burst 260ms ease-out forwards;
+        }
+
+        .practice-hit-spark-center {
+          transform: translate(-50%, -50%) scaleX(0.55);
+        }
+
+        .practice-hit-spark-left {
+          transform: translate(-50%, -50%) rotate(-32deg) scaleX(0.42);
+        }
+
+        .practice-hit-spark-right {
+          transform: translate(-50%, -50%) rotate(32deg) scaleX(0.42);
+        }
+
+        @keyframes practice-hit-burst {
+          0% {
+            opacity: 0.95;
+          }
+          100% {
+            opacity: 0;
+            width: 104px;
+          }
+        }
+
         .practice-beat-line {
           position: absolute;
           left: 14px;
           right: 14px;
           height: 1px;
+          transform: translateY(-50%);
           background: rgba(194, 203, 214, 0.18);
           z-index: 0;
           pointer-events: none;
@@ -914,6 +1003,7 @@ export default function PracticePage() {
           left: 14px;
           right: 14px;
           height: 3px;
+          transform: translateY(-50%);
           border-radius: 999px;
           background: linear-gradient(90deg, rgba(100, 245, 231, 0.3), rgba(236, 254, 255, 1), rgba(100, 245, 231, 0.3));
           box-shadow: 0 0 30px rgba(236, 254, 255, 0.36);

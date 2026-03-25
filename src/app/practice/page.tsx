@@ -89,6 +89,41 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
 
+function normalizeBindingFromKeyboardEvent(event: KeyboardEvent) {
+  const { code, key } = event;
+
+  if (code === "Space") return " ";
+  if (code === "Quote") return "'";
+  if (code === "Semicolon") return ";";
+  if (code === "Comma") return ",";
+  if (code === "Period") return ".";
+  if (code === "Slash") return "/";
+  if (code === "Backquote") return "`";
+  if (code === "BracketLeft") return "[";
+  if (code === "BracketRight") return "]";
+  if (code === "Backslash") return "\\";
+  if (code === "Minus") return "-";
+  if (code === "Equal") return "=";
+
+  if (/^Key[A-Z]$/.test(code)) {
+    return code.slice(3).toLowerCase();
+  }
+
+  if (/^Digit[0-9]$/.test(code)) {
+    return code.slice(5);
+  }
+
+  return key.length === 1 ? key.toLowerCase() : key;
+}
+
+function matchesBinding(event: KeyboardEvent, binding: string) {
+  const normalizedBinding = binding.toLowerCase();
+  const normalizedKey = event.key.toLowerCase();
+  const normalizedFromCode = normalizeBindingFromKeyboardEvent(event).toLowerCase();
+
+  return normalizedKey === normalizedBinding || normalizedFromCode === normalizedBinding;
+}
+
 function formatKeyLabel(key: string) {
   if (key === " ") return "SPACE";
   return key.length === 1 ? key.toUpperCase() : key.toUpperCase();
@@ -185,6 +220,7 @@ export default function PracticePage() {
   const [hitEffects, setHitEffects] = useState<HitEffect[]>([]);
   const [lanePressEffects, setLanePressEffects] = useState<LanePressEffect[]>([]);
 
+  const rootRef = useRef<HTMLElement | null>(null);
   const startAtRef = useRef(0);
   const rafRef = useRef<number | null>(null);
   const notesRef = useRef<Note[]>([]);
@@ -292,6 +328,10 @@ export default function PracticePage() {
     [showFeedback, spawnHitEffect],
   );
 
+  const focusPracticeRoot = useCallback(() => {
+    rootRef.current?.focus();
+  }, []);
+
   const startGame = useCallback(() => {
     const nextNotes = createNotes(config);
     notesRef.current = nextNotes;
@@ -310,7 +350,8 @@ export default function PracticePage() {
     setLanePressEffects([]);
     setGameState("playing");
     startAtRef.current = performance.now();
-  }, [config]);
+    window.setTimeout(() => focusPracticeRoot(), 0);
+  }, [config, focusPracticeRoot]);
 
   const resetToIdle = useCallback(() => {
     stopLoop();
@@ -389,9 +430,11 @@ export default function PracticePage() {
           return;
         }
 
+        const normalizedBinding = normalizeBindingFromKeyboardEvent(event);
+
         setConfig((prev) => ({
           ...prev,
-          [keyCaptureTarget === "left" ? "leftKey" : "rightKey"]: event.key.length === 1 ? key : event.key,
+          [keyCaptureTarget === "left" ? "leftKey" : "rightKey"]: normalizedBinding,
         }));
         setKeyCaptureTarget(null);
         return;
@@ -399,12 +442,11 @@ export default function PracticePage() {
 
       if (gameState !== "playing") return;
 
-      const lane =
-        key === config.leftKey.toLowerCase()
-          ? ACTIVE_TRILL_LANES[0]
-          : key === config.rightKey.toLowerCase()
-            ? ACTIVE_TRILL_LANES[1]
-            : null;
+      const lane = matchesBinding(event, config.leftKey)
+        ? ACTIVE_TRILL_LANES[0]
+        : matchesBinding(event, config.rightKey)
+          ? ACTIVE_TRILL_LANES[1]
+          : null;
 
       if (lane === null) return;
 
@@ -471,7 +513,7 @@ export default function PracticePage() {
   const leadInRemaining = Math.max(0, Math.ceil((LEAD_IN_MS - elapsedMs) / 1000));
 
   return (
-    <main className="page-main">
+    <main className="page-main" ref={rootRef} tabIndex={-1} onMouseDown={focusPracticeRoot}>
       <section className="page-section compact-hero">
         <div>
           <p className="eyebrow">PRACTICE MODE</p>

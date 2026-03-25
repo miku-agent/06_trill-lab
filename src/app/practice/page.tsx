@@ -35,6 +35,11 @@ type HitEffect = {
   lane: LaneIndex;
 };
 
+type LanePressEffect = {
+  lane: LaneIndex;
+  activatedAt: number;
+};
+
 type GameConfig = {
   bpm: number;
   subdivision: NoteSubdivision;
@@ -76,6 +81,7 @@ const RAIL_HEIGHT_PX = 520;
 const NOTE_SPAWN_Y = 24;
 const JUDGMENT_LINE_Y = 430;
 const HIT_EFFECT_DURATION_MS = 260;
+const LANE_PRESS_EFFECT_DURATION_MS = 120;
 const MIN_TRAVEL_MS = 260;
 const MAX_TRAVEL_MS = 1050;
 
@@ -177,13 +183,13 @@ export default function PracticePage() {
   const [lastFeedback, setLastFeedback] = useState<FeedbackState | null>(null);
   const [keyCaptureTarget, setKeyCaptureTarget] = useState<KeyCaptureTarget>(null);
   const [hitEffects, setHitEffects] = useState<HitEffect[]>([]);
+  const [lanePressEffects, setLanePressEffects] = useState<LanePressEffect[]>([]);
 
   const startAtRef = useRef(0);
   const rafRef = useRef<number | null>(null);
   const notesRef = useRef<Note[]>([]);
   const lastJudgmentTimeoutRef = useRef<number | null>(null);
   const hitEffectIdRef = useRef(0);
-  const lastAcceptedLaneRef = useRef<LaneIndex | null>(null);
 
   const travelMs = useMemo(() => getTravelMs(config.speed), [config.speed]);
   const beatGuideLines = useMemo(() => createBeatGuideLines(config), [config]);
@@ -203,6 +209,16 @@ export default function PracticePage() {
     window.setTimeout(() => {
       setHitEffects((prev) => prev.filter((effect) => effect.id !== id));
     }, HIT_EFFECT_DURATION_MS);
+  }, []);
+
+  const triggerLanePressEffect = useCallback((lane: LaneIndex) => {
+    const activatedAt = performance.now();
+
+    setLanePressEffects((prev) => [...prev.filter((effect) => effect.lane !== lane), { lane, activatedAt }]);
+
+    window.setTimeout(() => {
+      setLanePressEffects((prev) => prev.filter((effect) => !(effect.lane === lane && effect.activatedAt === activatedAt)));
+    }, LANE_PRESS_EFFECT_DURATION_MS);
   }, []);
 
   const showFeedback = useCallback((label: string, tone: FeedbackTone) => {
@@ -266,12 +282,6 @@ export default function PracticePage() {
         };
       });
 
-      if (judgment !== "miss") {
-        lastAcceptedLaneRef.current = lane;
-      } else {
-        lastAcceptedLaneRef.current = null;
-      }
-
       if (judgment === "perfect") {
         spawnHitEffect(lane);
       }
@@ -297,7 +307,7 @@ export default function PracticePage() {
     setElapsedMs(0);
     setLastFeedback(null);
     setHitEffects([]);
-    lastAcceptedLaneRef.current = null;
+    setLanePressEffects([]);
     setGameState("playing");
     startAtRef.current = performance.now();
   }, [config]);
@@ -309,7 +319,7 @@ export default function PracticePage() {
     setNotes([]);
     setLastFeedback(null);
     setHitEffects([]);
-    lastAcceptedLaneRef.current = null;
+    setLanePressEffects([]);
     setStats({
       combo: 0,
       maxCombo: 0,
@@ -399,10 +409,11 @@ export default function PracticePage() {
       if (lane === null) return;
 
       event.preventDefault();
+      triggerLanePressEffect(lane);
 
       const currentTime = performance.now() - startAtRef.current;
-      const unresolvedNotes = notesRef.current.filter((note) => !note.judged);
-      const candidates = unresolvedNotes
+      const laneNotes = notesRef.current.filter((note) => note.lane === lane && !note.judged);
+      const candidates = laneNotes
         .map((note) => ({ note, delta: currentTime - note.time }))
         .filter(({ delta }) => Math.abs(delta) <= MISS_WINDOW_MS)
         .sort((a, b) => Math.abs(a.delta) - Math.abs(b.delta));
@@ -410,23 +421,13 @@ export default function PracticePage() {
       const target = candidates[0];
 
       if (!target) {
-        const nextNote = unresolvedNotes[0];
+        const nextLaneNote = laneNotes[0];
 
-        if (nextNote && nextNote.time - currentTime > GOOD_WINDOW_MS) {
+        if (nextLaneNote && nextLaneNote.time - currentTime > GOOD_WINDOW_MS) {
           showFeedback("EARLY", "early");
         } else {
           showFeedback("MISS", "miss");
         }
-        return;
-      }
-
-      if (target.note.lane !== lane) {
-        showFeedback("WRONG", "wrong");
-        return;
-      }
-
-      if (lastAcceptedLaneRef.current === lane) {
-        showFeedback("WRONG", "wrong");
         return;
       }
 
@@ -448,7 +449,7 @@ export default function PracticePage() {
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [applyJudgment, config.leftKey, config.rightKey, config.endMode, finishGame, gameState, keyCaptureTarget, showFeedback]);
+  }, [applyJudgment, config.leftKey, config.rightKey, config.endMode, finishGame, gameState, keyCaptureTarget, showFeedback, triggerLanePressEffect]);
 
   useEffect(() => {
     return () => {
@@ -669,6 +670,8 @@ export default function PracticePage() {
                       <span>LANE {lane + 1}</span>
                       <strong>{laneKey ? formatKeyLabel(laneKey) : "-"}</strong>
                     </div>
+
+                    {lanePressEffects.some((effect) => effect.lane === lane) && <div className="practice-lane-press-effect" />}
 
                     {laneNotes.map((note) => {
                       const y =
@@ -916,6 +919,17 @@ export default function PracticePage() {
           opacity: 0.55;
         }
 
+        .practice-lane-press-effect {
+          position: absolute;
+          inset: 0;
+          pointer-events: none;
+          z-index: 1;
+          background:
+            radial-gradient(circle at 50% 78%, rgba(100, 245, 231, 0.34), rgba(100, 245, 231, 0) 58%),
+            linear-gradient(180deg, rgba(100, 245, 231, 0.08) 0%, rgba(100, 245, 231, 0.26) 55%, rgba(100, 245, 231, 0.08) 100%);
+          animation: practice-lane-press 120ms ease-out;
+        }
+
         .practice-lane-top {
           position: absolute;
           top: 0;
@@ -998,6 +1012,21 @@ export default function PracticePage() {
 
         .practice-hit-spark-right {
           transform: translate(-50%, -50%) rotate(32deg) scaleX(0.42);
+        }
+
+        @keyframes practice-lane-press {
+          0% {
+            opacity: 0;
+            transform: scaleY(0.92);
+          }
+          35% {
+            opacity: 1;
+            transform: scaleY(1);
+          }
+          100% {
+            opacity: 0;
+            transform: scaleY(1.04);
+          }
         }
 
         @keyframes practice-hit-burst {

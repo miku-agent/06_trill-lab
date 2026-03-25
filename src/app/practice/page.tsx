@@ -16,6 +16,12 @@ type Note = {
   judgment: JudgmentType | null;
 };
 
+type BeatGuideLine = {
+  id: number;
+  time: number;
+  isMeasure: boolean;
+};
+
 type GameConfig = {
   bpm: number;
   subdivision: 1 | 2 | 4 | 8;
@@ -67,13 +73,19 @@ function formatKeyLabel(key: string) {
   return key.length === 1 ? key.toUpperCase() : key.toUpperCase();
 }
 
+function getTimelineTotalMs(config: GameConfig) {
+  const beatMs = 60000 / config.bpm;
+  const intervalMs = beatMs / config.subdivision;
+
+  return config.endMode === "timed"
+    ? config.duration * 1000 + LEAD_IN_MS + intervalMs * 2
+    : 60000;
+}
+
 function createNotes(config: GameConfig): Note[] {
   const beatMs = 60000 / config.bpm;
   const intervalMs = beatMs / config.subdivision;
-  const totalMs =
-    config.endMode === "timed"
-      ? config.duration * 1000 + LEAD_IN_MS + intervalMs * 2
-      : 60000;
+  const totalMs = getTimelineTotalMs(config);
 
   const notes: Note[] = [];
   let laneCursor = 0;
@@ -103,6 +115,28 @@ function getTravelMs(speed: number) {
   return Math.round(clamp(MAX_TRAVEL_MS - eased * (MAX_TRAVEL_MS - MIN_TRAVEL_MS), MIN_TRAVEL_MS, MAX_TRAVEL_MS));
 }
 
+function createBeatGuideLines(config: GameConfig): BeatGuideLine[] {
+  const beatMs = 60000 / config.bpm;
+  const totalMs = getTimelineTotalMs(config);
+  const lines: BeatGuideLine[] = [];
+
+  let currentTime = LEAD_IN_MS;
+  let id = 0;
+
+  while (currentTime <= totalMs) {
+    lines.push({
+      id,
+      time: currentTime,
+      isMeasure: id % 4 === 0,
+    });
+
+    id += 1;
+    currentTime += beatMs;
+  }
+
+  return lines;
+}
+
 function getAccuracy(stats: GameStats) {
   if (stats.totalNotes === 0) return 0;
   return ((stats.perfect + stats.good) / stats.totalNotes) * 100;
@@ -130,6 +164,7 @@ export default function PracticePage() {
   const lastJudgmentTimeoutRef = useRef<number | null>(null);
 
   const travelMs = useMemo(() => getTravelMs(config.speed), [config.speed]);
+  const beatGuideLines = useMemo(() => createBeatGuideLines(config), [config]);
 
   const stopLoop = useCallback(() => {
     if (rafRef.current !== null) {
@@ -527,10 +562,27 @@ export default function PracticePage() {
               <div className="practice-badge-row">
                 <span className="practice-badge">ACTIVE: 2 / 3 레인</span>
                 <span className="practice-badge">NOTE WIDTH: FULL</span>
+                <span className="practice-badge">BEAT LINE: 1/4</span>
               </div>
             </div>
 
             <div className="practice-rail" style={{ height: `${RAIL_HEIGHT_PX}px` }}>
+              {beatGuideLines.map((line) => {
+                const y = JUDGMENT_LINE_Y - ((line.time - elapsedMs) / travelMs) * (JUDGMENT_LINE_Y - 24);
+
+                if (y < -4 || y > RAIL_HEIGHT_PX) {
+                  return null;
+                }
+
+                return (
+                  <div
+                    key={line.id}
+                    className={`practice-beat-line${line.isMeasure ? " is-measure" : ""}`}
+                    style={{ top: `${y}px` }}
+                  />
+                );
+              })}
+
               {PRACTICE_LANES.map((lane) => {
                 const laneNotes = notes.filter((note) => note.lane === lane);
                 const laneKey =
@@ -780,6 +832,7 @@ export default function PracticePage() {
           overflow: hidden;
           background: rgba(255, 255, 255, 0.025);
           border: 1px solid rgba(255, 255, 255, 0.05);
+          z-index: 1;
         }
 
         .practice-lane.is-active {
@@ -838,6 +891,22 @@ export default function PracticePage() {
         .practice-note.is-miss {
           background: linear-gradient(180deg, rgba(255, 122, 144, 0.95), rgba(255, 122, 144, 0.75));
           opacity: 0.45;
+        }
+
+        .practice-beat-line {
+          position: absolute;
+          left: 14px;
+          right: 14px;
+          height: 1px;
+          background: rgba(194, 203, 214, 0.18);
+          z-index: 0;
+          pointer-events: none;
+        }
+
+        .practice-beat-line.is-measure {
+          height: 2px;
+          background: rgba(194, 203, 214, 0.34);
+          box-shadow: 0 0 12px rgba(194, 203, 214, 0.1);
         }
 
         .practice-judgment-line {

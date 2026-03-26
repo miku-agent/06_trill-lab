@@ -1,22 +1,33 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
+import { getPatternDefinition, type PatternKey } from "@/app/lib/patterns";
+import {
+  getDefaultDrurukVariant,
+  getDrurukKeyLabels,
+  getDrurukLaneIndexes,
+  getDrurukProfile,
+  type DrurukKeyCount,
+  type DrurukDirection,
+} from "@/app/lib/druruk";
 
 type GameState = "idle" | "playing" | "ended";
 type EndMode = "firstMiss" | "timed";
 type JudgmentType = "perfect" | "good" | "miss";
 type FeedbackTone = JudgmentType | "early" | "wrong";
+type PracticePattern = Extract<PatternKey, "trill" | "druruk">;
+type NoteSubdivision = 1 | 2 | 4 | 8 | 16 | 32;
 
 type FeedbackState = {
   label: string;
   tone: FeedbackTone;
 };
-type LaneIndex = 0 | 1 | 2 | 3;
-type KeyCaptureTarget = "left" | "right" | null;
 
 type Note = {
   id: number;
-  lane: LaneIndex;
+  lane: number;
   time: number;
   judged: boolean;
   judgment: JudgmentType | null;
@@ -28,21 +39,19 @@ type BeatGuideLine = {
   isMeasure: boolean;
 };
 
-type NoteSubdivision = 1 | 2 | 4 | 8 | 16 | 32;
-
 type HitEffect = {
   id: number;
-  lane: LaneIndex;
+  lane: number;
 };
 
 type LanePressEffect = {
-  lane: LaneIndex;
+  lane: number;
   activatedAt: number;
 };
 
 type LaneJudgmentFeedback = {
   id: number;
-  lane: LaneIndex;
+  lane: number;
   judgment: Extract<JudgmentType, "perfect" | "good">;
   signedMs: string;
   timingLabel: "FAST" | "SLOW";
@@ -56,13 +65,15 @@ type PracticeTestApi = {
 };
 
 type GameConfig = {
+  pattern: PracticePattern;
   bpm: number;
   subdivision: NoteSubdivision;
   speed: number;
   endMode: EndMode;
   duration: number;
-  leftKey: string;
-  rightKey: string;
+  keyBindings: string[];
+  direction: DrurukDirection;
+  drurukKeyCount: DrurukKeyCount;
 };
 
 type GameStats = {
@@ -74,18 +85,26 @@ type GameStats = {
   totalNotes: number;
 };
 
-const DEFAULT_CONFIG: GameConfig = {
-  bpm: 150,
-  subdivision: 4,
-  speed: 6.5,
-  endMode: "timed",
-  duration: 30,
-  leftKey: "a",
-  rightKey: "'",
+type PatternSpec = {
+  key: PracticePattern;
+  title: string;
+  heroTitle: string;
+  heroSubtitle: string;
+  statusLabel: string;
+  configTitle: string;
+  configNote: string;
+  railTitle: string;
+  railBadges: (config: GameConfig) => string[];
+  helpIdle: string | ((config: GameConfig) => string);
+  helpPlaying: (config: GameConfig) => string;
+  laneCount: number;
+  activeLaneIndexes: (config: GameConfig) => number[];
+  defaultBindings: (config: GameConfig) => string[];
+  sequenceFor: (config: GameConfig) => number[];
+  laneLabel: (lane: number, config: GameConfig) => string;
+  settingsSummary: (config: GameConfig) => string;
 };
 
-const PRACTICE_LANES: LaneIndex[] = [0, 1, 2, 3];
-const ACTIVE_TRILL_LANES: LaneIndex[] = [1, 2];
 const LEAD_IN_MS = 1800;
 const FIRST_MISS_BUFFER_MS = 5000;
 const PERFECT_WINDOW_MS = 45;
@@ -98,8 +117,78 @@ const JUDGMENT_LINE_Y = 430;
 const HIT_EFFECT_DURATION_MS = 260;
 const LANE_PRESS_EFFECT_DURATION_MS = 120;
 const LANE_FEEDBACK_DURATION_MS = 720;
+const LANE_FEEDBACK_GAP_PX = 12;
 const MIN_TRAVEL_MS = 260;
 const MAX_TRAVEL_MS = 1050;
+
+const DEFAULT_CONFIG: GameConfig = {
+  pattern: "trill",
+  bpm: 150,
+  subdivision: 4,
+  speed: 6.5,
+  endMode: "timed",
+  duration: 30,
+  keyBindings: ["a", "'"],
+  direction: "forward",
+  drurukKeyCount: 6,
+};
+
+const PRACTICE_PATTERN_KEYS: PracticePattern[] = ["trill", "druruk"];
+const TRILL_ACTIVE_LANES = [1, 2];
+const PRACTICE_PATTERN_SPECS: Record<PracticePattern, PatternSpec> = {
+  trill: {
+    key: "trill",
+    title: "트릴",
+    heroTitle: "연습 모드",
+    heroSubtitle: "중앙 2레인 트릴을 리듬게임식 레일에서 바로 연습할 수 있어요.",
+    statusLabel: "TRILL PRACTICE",
+    configTitle: "트릴 연습 세팅",
+    configNote: "4레인 베이스 위에서 중앙 2레인만 활성화되는 기존 트릴 연습을 유지해요.",
+    railTitle: "4레인 트릴 레일",
+    railBadges: (config) => ["ACTIVE: 2 / 4 레인", "NOTE WIDTH: FULL", `BEAT LINE: 1/4 · 비트 ${config.subdivision}`],
+    helpIdle: "연습을 시작하면 중앙 2레인에서 트릴 노트가 떨어져요.",
+    helpPlaying: (config) => `중앙 2레인에 맞춰 ${formatKeyLabel(config.keyBindings[0])} / ${formatKeyLabel(config.keyBindings[1])} 를 번갈아 눌러주세요.`,
+    laneCount: 4,
+    activeLaneIndexes: () => TRILL_ACTIVE_LANES,
+    defaultBindings: () => ["a", "'"],
+    sequenceFor: () => TRILL_ACTIVE_LANES,
+    laneLabel: (lane) => `LANE ${lane + 1}`,
+    settingsSummary: (config) => `${formatKeyLabel(config.keyBindings[0])} / ${formatKeyLabel(config.keyBindings[1])} 중앙 2레인 트릴`,
+  },
+  druruk: {
+    key: "druruk",
+    title: "드르륵",
+    heroTitle: "연습 모드",
+    heroSubtitle: "4키/6키 계단 입력을 순방향/역방향으로 바로 연습할 수 있어요.",
+    statusLabel: "DRURUK",
+    configTitle: "드르륵 세팅",
+    configNote: "키 수와 방향을 바꾸면 해당 계열 패턴으로 바로 판정이 바뀌어요.",
+    railTitle: "드르륵 레일",
+    railBadges: (config) => {
+      const profile = getDrurukProfile(getDefaultDrurukVariant(config.drurukKeyCount === 4 ? 4 : 6));
+      const directionLabel = config.direction === "forward"
+        ? profile.keyCount === 4 ? "1→2→3→4" : "1→2→3→4→5→6"
+        : profile.keyCount === 4 ? "4→3→2→1" : "6→5→4→3→2→1";
+      return [
+        `ACTIVE: ${config.drurukKeyCount} / ${config.drurukKeyCount} 레인`,
+        `DIR: ${directionLabel}`,
+        `BEAT LINE: 1/4 · 비트 ${config.subdivision}`,
+      ];
+    },
+    helpIdle: (config) => `${config.drurukKeyCount}레인 전체에 드르륵 노트가 순서대로 떨어져요.`,
+    helpPlaying: (config) =>
+      config.direction === "forward"
+        ? `${config.drurukKeyCount}키 ${config.keyBindings.map(formatKeyLabel).join(" → ")} 순서로 눌러주세요.`
+        : `${config.drurukKeyCount}키 ${config.keyBindings.slice(0, config.drurukKeyCount).reverse().map(formatKeyLabel).join(" → ")} 순서로 눌러주세요.`,
+    laneCount: 6,
+    activeLaneIndexes: (config) => getDrurukLaneIndexes(config.drurukKeyCount, "forward"),
+    defaultBindings: (config) => getDrurukProfile(getDefaultDrurukVariant(config.drurukKeyCount)).defaultKeys.map((key) => key.toLowerCase()),
+    sequenceFor: (config) => getDrurukLaneIndexes(config.drurukKeyCount, config.direction),
+    laneLabel: (lane, config) => getDrurukKeyLabels(config.drurukKeyCount)[lane] ?? `${lane + 1}번`,
+    settingsSummary: (config) =>
+      `${config.drurukKeyCount}키 · ${config.direction === "forward" ? "정방향" : "역방향"} · ${config.keyBindings.map(formatKeyLabel).join(" / ")}`,
+  },
+};
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
@@ -154,9 +243,7 @@ function getTimelineTotalMs(config: GameConfig) {
   const beatMs = 60000 / config.bpm;
   const intervalMs = beatMs / config.subdivision;
 
-  return config.endMode === "timed"
-    ? config.duration * 1000 + LEAD_IN_MS + intervalMs * 2
-    : 60000;
+  return config.endMode === "timed" ? config.duration * 1000 + LEAD_IN_MS + intervalMs * 2 : 60000;
 }
 
 function getTimelineCenterY(noteTime: number, elapsedMs: number, travelMs: number) {
@@ -164,26 +251,28 @@ function getTimelineCenterY(noteTime: number, elapsedMs: number, travelMs: numbe
 }
 
 function createNotes(config: GameConfig): Note[] {
+  const spec = PRACTICE_PATTERN_SPECS[config.pattern];
   const beatMs = 60000 / config.bpm;
   const intervalMs = beatMs / config.subdivision;
   const totalMs = getTimelineTotalMs(config);
+  const sequence = spec.sequenceFor(config);
 
   const notes: Note[] = [];
-  let laneCursor = 0;
+  let cursor = 0;
   let currentTime = LEAD_IN_MS;
   let id = 0;
 
   while (currentTime <= totalMs) {
     notes.push({
       id,
-      lane: ACTIVE_TRILL_LANES[laneCursor % ACTIVE_TRILL_LANES.length],
+      lane: sequence[cursor % sequence.length],
       time: currentTime,
       judged: false,
       judgment: null,
     });
 
     id += 1;
-    laneCursor += 1;
+    cursor += 1;
     currentTime += intervalMs;
   }
 
@@ -223,9 +312,36 @@ function getAccuracy(stats: GameStats) {
   return ((stats.perfect + stats.good) / stats.totalNotes) * 100;
 }
 
+function getInitialConfig(pattern: PracticePattern): GameConfig {
+  return {
+    ...DEFAULT_CONFIG,
+    pattern,
+    keyBindings: PRACTICE_PATTERN_SPECS[pattern].defaultBindings(DEFAULT_CONFIG),
+    direction: "forward",
+    drurukKeyCount: 6,
+  };
+}
+
+function getPlayablePattern(input: string | null | undefined): PracticePattern {
+  const pattern = getPatternDefinition(input).key;
+  return pattern === "druruk" ? "druruk" : "trill";
+}
+
 export default function PracticePage() {
+  return (
+    <Suspense fallback={<main className="page-main" />}>
+      <PracticePageContent />
+    </Suspense>
+  );
+}
+
+function PracticePageContent() {
+  const searchParams = useSearchParams();
   const testMode = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("testMode") === "true";
-  const [config, setConfig] = useState<GameConfig>(DEFAULT_CONFIG);
+  const pattern = getPlayablePattern(searchParams.get("pattern"));
+  const spec = PRACTICE_PATTERN_SPECS[pattern];
+
+  const [config, setConfig] = useState<GameConfig>(() => getInitialConfig(pattern));
   const [gameState, setGameState] = useState<GameState>("idle");
   const [notes, setNotes] = useState<Note[]>([]);
   const [stats, setStats] = useState<GameStats>({
@@ -238,7 +354,7 @@ export default function PracticePage() {
   });
   const [elapsedMs, setElapsedMs] = useState(0);
   const [lastFeedback, setLastFeedback] = useState<FeedbackState | null>(null);
-  const [keyCaptureTarget, setKeyCaptureTarget] = useState<KeyCaptureTarget>(null);
+  const [keyCaptureTarget, setKeyCaptureTarget] = useState<number | null>(null);
   const [hitEffects, setHitEffects] = useState<HitEffect[]>([]);
   const [lanePressEffects, setLanePressEffects] = useState<LanePressEffect[]>([]);
   const [laneJudgmentFeedbacks, setLaneJudgmentFeedbacks] = useState<LaneJudgmentFeedback[]>([]);
@@ -252,8 +368,18 @@ export default function PracticePage() {
   const laneFeedbackIdRef = useRef(0);
   const controlledElapsedMsRef = useRef<number | null>(null);
 
+  useEffect(() => {
+    notesRef.current = [];
+    controlledElapsedMsRef.current = null;
+  }, [pattern]);
+
   const travelMs = useMemo(() => getTravelMs(config.speed), [config.speed]);
   const beatGuideLines = useMemo(() => createBeatGuideLines(config), [config]);
+  const sequence = useMemo(() => spec.sequenceFor(config), [config, spec]);
+  const activeLanes = useMemo(() => spec.activeLaneIndexes(config), [config, spec]);
+  const laneIndexes = useMemo(() => Array.from({ length: spec.laneCount }, (_, index) => index), [spec.laneCount]);
+  const nextExpectedNote = useMemo(() => notes.find((note) => !note.judged) ?? null, [notes]);
+  const nextExpectedLane = nextExpectedNote?.lane ?? sequence[0] ?? 0;
 
   const stopLoop = useCallback(() => {
     if (rafRef.current !== null) {
@@ -262,9 +388,8 @@ export default function PracticePage() {
     }
   }, []);
 
-  const spawnHitEffect = useCallback((lane: LaneIndex) => {
+  const spawnHitEffect = useCallback((lane: number) => {
     const id = hitEffectIdRef.current++;
-
     setHitEffects((prev) => [...prev, { id, lane }]);
 
     window.setTimeout(() => {
@@ -272,9 +397,8 @@ export default function PracticePage() {
     }, HIT_EFFECT_DURATION_MS);
   }, []);
 
-  const triggerLanePressEffect = useCallback((lane: LaneIndex) => {
+  const triggerLanePressEffect = useCallback((lane: number) => {
     const activatedAt = performance.now();
-
     setLanePressEffects((prev) => [...prev.filter((effect) => effect.lane !== lane), { lane, activatedAt }]);
 
     window.setTimeout(() => {
@@ -282,23 +406,17 @@ export default function PracticePage() {
     }, LANE_PRESS_EFFECT_DURATION_MS);
   }, []);
 
-  const spawnLaneJudgmentFeedback = useCallback(
-    (lane: LaneIndex, judgment: Extract<JudgmentType, "perfect" | "good">, deltaMs: number) => {
-      const id = laneFeedbackIdRef.current++;
-      const signedMs = formatSignedMs(deltaMs);
-      const timingLabel: "FAST" | "SLOW" = deltaMs < 0 ? "FAST" : "SLOW";
+  const spawnLaneJudgmentFeedback = useCallback((lane: number, judgment: Extract<JudgmentType, "perfect" | "good">, deltaMs: number) => {
+    const id = laneFeedbackIdRef.current++;
+    const signedMs = formatSignedMs(deltaMs);
+    const timingLabel: "FAST" | "SLOW" = deltaMs < 0 ? "FAST" : "SLOW";
 
-      setLaneJudgmentFeedbacks((prev) => [
-        ...prev.filter((feedback) => feedback.lane !== lane),
-        { id, lane, judgment, signedMs, timingLabel },
-      ]);
+    setLaneJudgmentFeedbacks((prev) => [...prev.filter((feedback) => feedback.lane !== lane), { id, lane, judgment, signedMs, timingLabel }]);
 
-      window.setTimeout(() => {
-        setLaneJudgmentFeedbacks((prev) => prev.filter((feedback) => feedback.id !== id));
-      }, LANE_FEEDBACK_DURATION_MS);
-    },
-    [],
-  );
+    window.setTimeout(() => {
+      setLaneJudgmentFeedbacks((prev) => prev.filter((feedback) => feedback.id !== id));
+    }, LANE_FEEDBACK_DURATION_MS);
+  }, []);
 
   const showFeedback = useCallback((label: string, tone: FeedbackTone) => {
     setLastFeedback({ label, tone });
@@ -318,68 +436,61 @@ export default function PracticePage() {
     setGameState("ended");
   }, [stopLoop]);
 
-  const applyJudgment = useCallback(
-    (noteId: number, judgment: JudgmentType, lane: LaneIndex) => {
-      const noteIndex = notesRef.current.findIndex((note) => note.id === noteId && !note.judged);
+  const applyJudgment = useCallback((noteId: number, judgment: JudgmentType, lane: number) => {
+    const noteIndex = notesRef.current.findIndex((note) => note.id === noteId && !note.judged);
+    if (noteIndex < 0) return false;
 
-      if (noteIndex < 0) return false;
+    const nextNotes = notesRef.current.map((note, index) =>
+      index === noteIndex
+        ? {
+            ...note,
+            judged: true,
+            judgment,
+          }
+        : note,
+    );
 
-      const nextNotes = notesRef.current.map((note, index) =>
-        index === noteIndex
-          ? {
-              ...note,
-              judged: true,
-              judgment,
-            }
-          : note,
-      );
+    notesRef.current = nextNotes;
+    setNotes(nextNotes);
 
-      notesRef.current = nextNotes;
-      setNotes(nextNotes);
-
-      setStats((prev) => {
-        if (judgment === "miss") {
-          return {
-            ...prev,
-            combo: 0,
-            miss: prev.miss + 1,
-          };
-        }
-
-        const combo = prev.combo + 1;
+    setStats((prev) => {
+      if (judgment === "miss") {
         return {
           ...prev,
-          combo,
-          maxCombo: Math.max(prev.maxCombo, combo),
-          perfect: judgment === "perfect" ? prev.perfect + 1 : prev.perfect,
-          good: judgment === "good" ? prev.good + 1 : prev.good,
+          combo: 0,
+          miss: prev.miss + 1,
         };
-      });
-
-      if (judgment === "perfect") {
-        spawnHitEffect(lane);
       }
 
-      showFeedback(judgment.toUpperCase(), judgment);
-      return true;
-    },
-    [showFeedback, spawnHitEffect],
-  );
+      const combo = prev.combo + 1;
+      return {
+        ...prev,
+        combo,
+        maxCombo: Math.max(prev.maxCombo, combo),
+        perfect: judgment === "perfect" ? prev.perfect + 1 : prev.perfect,
+        good: judgment === "good" ? prev.good + 1 : prev.good,
+      };
+    });
+
+    if (judgment === "perfect") {
+      spawnHitEffect(lane);
+    }
+
+    showFeedback(judgment.toUpperCase(), judgment);
+    return true;
+  }, [showFeedback, spawnHitEffect]);
 
   const focusPracticeRoot = useCallback(() => {
     rootRef.current?.focus();
   }, []);
 
-  const handleRootMouseDown = useCallback(
-    (event: MouseEvent<HTMLElement>) => {
-      if (event.target instanceof HTMLElement && event.target.closest("button, input, select, textarea, a, label")) {
-        return;
-      }
+  const handleRootMouseDown = useCallback((event: MouseEvent<HTMLElement>) => {
+    if (event.target instanceof HTMLElement && event.target.closest("button, input, select, textarea, a, label")) {
+      return;
+    }
 
-      focusPracticeRoot();
-    },
-    [focusPracticeRoot],
-  );
+    focusPracticeRoot();
+  }, [focusPracticeRoot]);
 
   const getCurrentElapsedMs = useCallback(() => {
     if (controlledElapsedMsRef.current !== null) {
@@ -393,9 +504,7 @@ export default function PracticePage() {
     controlledElapsedMsRef.current = nextElapsedMs;
     setElapsedMs(nextElapsedMs);
 
-    const staleMisses = notesRef.current.filter(
-      (note) => !note.judged && nextElapsedMs - note.time > MISS_WINDOW_MS,
-    );
+    const staleMisses = notesRef.current.filter((note) => !note.judged && nextElapsedMs - note.time > MISS_WINDOW_MS);
 
     staleMisses.forEach((note) => {
       applyJudgment(note.id, "miss", note.lane);
@@ -406,14 +515,7 @@ export default function PracticePage() {
     const nextNotes = createNotes(config);
     notesRef.current = nextNotes;
     setNotes(nextNotes);
-    setStats({
-      combo: 0,
-      maxCombo: 0,
-      perfect: 0,
-      good: 0,
-      miss: 0,
-      totalNotes: nextNotes.length,
-    });
+    setStats({ combo: 0, maxCombo: 0, perfect: 0, good: 0, miss: 0, totalNotes: nextNotes.length });
     setElapsedMs(0);
     setLastFeedback(null);
     setHitEffects([]);
@@ -434,14 +536,7 @@ export default function PracticePage() {
     setHitEffects([]);
     setLanePressEffects([]);
     setLaneJudgmentFeedbacks([]);
-    setStats({
-      combo: 0,
-      maxCombo: 0,
-      perfect: 0,
-      good: 0,
-      miss: 0,
-      totalNotes: 0,
-    });
+    setStats({ combo: 0, maxCombo: 0, perfect: 0, good: 0, miss: 0, totalNotes: 0 });
     controlledElapsedMsRef.current = null;
     setGameState("idle");
   }, [stopLoop]);
@@ -462,9 +557,7 @@ export default function PracticePage() {
       const elapsed = now - startAtRef.current;
       setElapsedMs(elapsed);
 
-      const staleMisses = notesRef.current.filter(
-        (note) => !note.judged && elapsed - note.time > MISS_WINDOW_MS,
-      );
+      const staleMisses = notesRef.current.filter((note) => !note.judged && elapsed - note.time > MISS_WINDOW_MS);
 
       if (staleMisses.length > 0) {
         staleMisses.forEach((note) => {
@@ -482,11 +575,7 @@ export default function PracticePage() {
         return;
       }
 
-      if (
-        config.endMode === "firstMiss" &&
-        elapsed > LEAD_IN_MS + FIRST_MISS_BUFFER_MS &&
-        notesRef.current.every((note) => note.judged)
-      ) {
+      if (config.endMode === "firstMiss" && elapsed > LEAD_IN_MS + FIRST_MISS_BUFFER_MS && notesRef.current.every((note) => note.judged)) {
         finishGame();
         return;
       }
@@ -500,20 +589,17 @@ export default function PracticePage() {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      const key = event.key.toLowerCase();
-
-      if (keyCaptureTarget) {
+      if (keyCaptureTarget !== null) {
         event.preventDefault();
-        if (key === "escape") {
+        if (event.key.toLowerCase() === "escape") {
           setKeyCaptureTarget(null);
           return;
         }
 
         const normalizedBinding = normalizeBindingFromKeyboardEvent(event);
-
         setConfig((prev) => ({
           ...prev,
-          [keyCaptureTarget === "left" ? "leftKey" : "rightKey"]: normalizedBinding,
+          keyBindings: prev.keyBindings.map((binding, index) => (index === keyCaptureTarget ? normalizedBinding : binding)),
         }));
         setKeyCaptureTarget(null);
         return;
@@ -521,25 +607,24 @@ export default function PracticePage() {
 
       if (gameState !== "playing") return;
 
-      const lane = matchesBinding(event, config.leftKey)
-        ? ACTIVE_TRILL_LANES[0]
-        : matchesBinding(event, config.rightKey)
-          ? ACTIVE_TRILL_LANES[1]
-          : null;
-
-      if (lane === null) return;
+      const pressedLane = config.keyBindings.findIndex((binding) => matchesBinding(event, binding));
+      if (pressedLane < 0) return;
 
       event.preventDefault();
-      triggerLanePressEffect(lane);
+      triggerLanePressEffect(pressedLane);
 
-      const currentTime = getCurrentElapsedMs();
-      const target = notesRef.current.find((note) => note.lane === lane && !note.judged);
-
+      const target = notesRef.current.find((note) => !note.judged);
       if (!target) {
         showFeedback("CLEAR", "perfect");
         return;
       }
 
+      if (pressedLane !== target.lane) {
+        showFeedback("WRONG", "wrong");
+        return;
+      }
+
+      const currentTime = getCurrentElapsedMs();
       const delta = currentTime - target.time;
 
       if (delta < -MISS_WINDOW_MS) {
@@ -553,13 +638,7 @@ export default function PracticePage() {
       }
 
       const distance = Math.abs(delta);
-      const judgment: JudgmentType =
-        distance <= PERFECT_WINDOW_MS
-          ? "perfect"
-          : distance <= GOOD_WINDOW_MS
-            ? "good"
-            : "miss";
-
+      const judgment: JudgmentType = distance <= PERFECT_WINDOW_MS ? "perfect" : distance <= GOOD_WINDOW_MS ? "good" : "miss";
       const applied = applyJudgment(target.id, judgment, target.lane);
       if (!applied) return;
 
@@ -574,7 +653,7 @@ export default function PracticePage() {
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [applyJudgment, config.leftKey, config.rightKey, config.endMode, finishGame, gameState, getCurrentElapsedMs, keyCaptureTarget, showFeedback, spawnLaneJudgmentFeedback, triggerLanePressEffect]);
+  }, [applyJudgment, config.endMode, config.keyBindings, finishGame, gameState, getCurrentElapsedMs, keyCaptureTarget, showFeedback, spawnLaneJudgmentFeedback, triggerLanePressEffect]);
 
   useEffect(() => {
     return () => {
@@ -611,14 +690,7 @@ export default function PracticePage() {
         notesRef.current = nextNotes;
         setConfig(nextConfig);
         setNotes(nextNotes);
-        setStats({
-          combo: 0,
-          maxCombo: 0,
-          perfect: 0,
-          good: 0,
-          miss: 0,
-          totalNotes: nextNotes.length,
-        });
+        setStats({ combo: 0, maxCombo: 0, perfect: 0, good: 0, miss: 0, totalNotes: nextNotes.length });
         setElapsedMs(0);
         setLastFeedback(null);
         setHitEffects([]);
@@ -645,36 +717,41 @@ export default function PracticePage() {
   const accuracy = getAccuracy(stats);
   const judgedNotes = stats.perfect + stats.good + stats.miss;
   const remainingNotes = Math.max(0, stats.totalNotes - judgedNotes);
-  const remainingSeconds =
-    config.endMode === "timed"
-      ? Math.max(0, Math.ceil((config.duration * 1000 + LEAD_IN_MS - elapsedMs) / 1000))
-      : null;
-
+  const remainingSeconds = config.endMode === "timed" ? Math.max(0, Math.ceil((config.duration * 1000 + LEAD_IN_MS - elapsedMs) / 1000)) : null;
   const leadInRemaining = Math.max(0, Math.ceil((LEAD_IN_MS - elapsedMs) / 1000));
+  const hasDuplicateBindings = new Set(config.keyBindings).size !== config.keyBindings.length;
 
   return (
     <main className="page-main" ref={rootRef} tabIndex={-1} onMouseDown={handleRootMouseDown}>
       <section className="page-section compact-hero">
         <div>
           <p className="eyebrow">PRACTICE MODE</p>
-          <h1 className="page-title">연습 모드</h1>
-          <p className="section-subtitle">
-            4레인 베이스 위에서 트릴을 안정적으로 연습하는 리듬게임식 MVP예요.
-          </p>
+          <h1 className="page-title">{spec.heroTitle}</h1>
+          <p className="section-subtitle">{spec.heroSubtitle}</p>
         </div>
-        <div className="status-pill">TRILL PRACTICE</div>
+        <div className="status-pill">{spec.statusLabel}</div>
       </section>
 
       <section className="page-section stack-gap-lg">
+        <div className="practice-pattern-tabs" aria-label="연습 패턴 선택">
+          {PRACTICE_PATTERN_KEYS.map((item) => {
+            const definition = getPatternDefinition(item);
+            const isActive = item === pattern;
+            return (
+              <Link key={item} href={`/practice?pattern=${item}`} className={`practice-pattern-tab${isActive ? " is-active" : ""}`}>
+                {definition.shortLabel}
+              </Link>
+            );
+          })}
+        </div>
+
         <article className="panel practice-panel">
           <div className="practice-control-header">
             <div>
               <p className="section-label">설정</p>
-              <h2 className="section-title">트릴 연습 세팅</h2>
+              <h2 className="section-title">{spec.configTitle}</h2>
             </div>
-            <p className="inline-note">
-              기본 구조는 4레인이지만 현재 플레이 입력은 중앙 2레인 트릴에 맞춰져 있어요.
-            </p>
+            <p className="inline-note">{spec.configNote}</p>
           </div>
 
           <div className="practice-config-grid">
@@ -686,9 +763,7 @@ export default function PracticePage() {
                 min={60}
                 max={320}
                 value={config.bpm}
-                onChange={(event) =>
-                  setConfig((prev) => ({ ...prev, bpm: clamp(Number(event.target.value) || 60, 60, 320) }))
-                }
+                onChange={(event) => setConfig((prev) => ({ ...prev, bpm: clamp(Number(event.target.value) || 60, 60, 320) }))}
                 disabled={gameState === "playing"}
               />
             </label>
@@ -698,12 +773,7 @@ export default function PracticePage() {
               <select
                 className="practice-input"
                 value={config.subdivision}
-                onChange={(event) =>
-                  setConfig((prev) => ({
-                    ...prev,
-                    subdivision: Number(event.target.value) as GameConfig["subdivision"],
-                  }))
-                }
+                onChange={(event) => setConfig((prev) => ({ ...prev, subdivision: Number(event.target.value) as NoteSubdivision }))}
                 disabled={gameState === "playing"}
               >
                 <option value={1}>1</option>
@@ -724,12 +794,10 @@ export default function PracticePage() {
                 max={10}
                 step={0.1}
                 value={config.speed}
-                onChange={(event) =>
-                  setConfig((prev) => ({ ...prev, speed: clamp(Number(event.target.value) || 0, 0, 10) }))
-                }
+                onChange={(event) => setConfig((prev) => ({ ...prev, speed: clamp(Number(event.target.value) || 0, 0, 10) }))}
                 disabled={gameState === "playing"}
               />
-              <small className="practice-field-hint">같은 속도 값이어도 이전보다 2배 빠르게 떨어지도록 조정했어요.</small>
+              <small className="practice-field-hint">속도 값을 올릴수록 판정선까지 더 빠르게 도달해요.</small>
             </label>
 
             <label className="practice-field">
@@ -737,9 +805,7 @@ export default function PracticePage() {
               <select
                 className="practice-input"
                 value={config.endMode}
-                onChange={(event) =>
-                  setConfig((prev) => ({ ...prev, endMode: event.target.value as EndMode }))
-                }
+                onChange={(event) => setConfig((prev) => ({ ...prev, endMode: event.target.value as EndMode }))}
                 disabled={gameState === "playing"}
               >
                 <option value="timed">시간 제한</option>
@@ -756,39 +822,62 @@ export default function PracticePage() {
                 max={180}
                 step={5}
                 value={config.duration}
-                onChange={(event) =>
-                  setConfig((prev) => ({ ...prev, duration: clamp(Number(event.target.value) || 10, 10, 180) }))
-                }
+                onChange={(event) => setConfig((prev) => ({ ...prev, duration: clamp(Number(event.target.value) || 10, 10, 180) }))}
                 disabled={gameState !== "idle" || config.endMode !== "timed"}
               />
             </label>
 
-            <div className="practice-field">
-              <span>왼쪽 키</span>
-              <button
-                type="button"
-                aria-label="왼쪽 키"
-                className={`key-value-button${keyCaptureTarget === "left" ? " is-capturing" : ""}`}
-                onClick={() => setKeyCaptureTarget("left")}
-                disabled={gameState === "playing"}
-              >
-                {keyCaptureTarget === "left" ? "키 입력 중... (ESC 취소)" : formatKeyLabel(config.leftKey)}
-              </button>
-            </div>
-
-            <div className="practice-field">
-              <span>오른쪽 키</span>
-              <button
-                type="button"
-                aria-label="오른쪽 키"
-                className={`key-value-button${keyCaptureTarget === "right" ? " is-capturing" : ""}`}
-                onClick={() => setKeyCaptureTarget("right")}
-                disabled={gameState === "playing"}
-              >
-                {keyCaptureTarget === "right" ? "키 입력 중... (ESC 취소)" : formatKeyLabel(config.rightKey)}
-              </button>
-            </div>
+            {pattern === "druruk" ? (
+              <>
+                <label className="practice-field">
+                  <span>키 수</span>
+                  <select
+                    className="practice-input"
+                    value={config.drurukKeyCount}
+                    onChange={(event) => {
+                      const nextCount = Number(event.target.value) as DrurukKeyCount;
+                      const nextBindings = getDrurukProfile(getDefaultDrurukVariant(nextCount)).defaultKeys.map((key) => key.toLowerCase());
+                      setConfig((prev) => ({ ...prev, drurukKeyCount: nextCount, keyBindings: nextBindings, direction: "forward" }));
+                    }}
+                    disabled={gameState === "playing"}
+                  >
+                    <option value={4}>4키</option>
+                    <option value={6}>6키</option>
+                  </select>
+                </label>
+                <label className="practice-field">
+                  <span>진행 방향</span>
+                  <select
+                    className="practice-input"
+                    value={config.direction}
+                    onChange={(event) => setConfig((prev) => ({ ...prev, direction: event.target.value as DrurukDirection }))}
+                    disabled={gameState === "playing"}
+                  >
+                    <option value="forward">{config.drurukKeyCount === 4 ? "1 → 2 → 3 → 4" : "1 → 2 → 3 → 4 → 5 → 6"}</option>
+                    <option value="reverse">{config.drurukKeyCount === 4 ? "4 → 3 → 2 → 1" : "6 → 5 → 4 → 3 → 2 → 1"}</option>
+                  </select>
+                </label>
+              </>
+            ) : null}
           </div>
+
+          <div className="practice-key-grid">
+            {config.keyBindings.slice(0, pattern === "druruk" ? config.drurukKeyCount : config.keyBindings.length).map((binding, index) => (
+              <div key={`${pattern}-binding-${index}`} className="practice-field">
+                <span>{spec.laneLabel(index, config)} 키</span>
+                <button
+                  type="button"
+                  className={`key-value-button${keyCaptureTarget === index ? " is-capturing" : ""}`}
+                  onClick={() => setKeyCaptureTarget(index)}
+                  disabled={gameState === "playing"}
+                >
+                  {keyCaptureTarget === index ? "키 입력 중... (ESC 취소)" : formatKeyLabel(binding)}
+                </button>
+              </div>
+            ))}
+          </div>
+
+          <p className={`inline-note${hasDuplicateBindings ? " is-danger" : ""}`}>{hasDuplicateBindings ? "같은 키를 중복 바인딩하면 입력 레인이 충돌할 수 있어요." : spec.settingsSummary(config)}</p>
 
           <div className="practice-actions-row">
             {gameState !== "playing" ? (
@@ -812,96 +901,63 @@ export default function PracticePage() {
             <div className="practice-rail-header">
               <div>
                 <p className="section-label">PLAY FIELD</p>
-                <h2 className="section-title">4레인 트릴 레일</h2>
+                <h2 className="section-title">{spec.railTitle}</h2>
               </div>
               <div className="practice-badge-row">
-                <span className="practice-badge">ACTIVE: 2 / 4 레인</span>
-                <span className="practice-badge">NOTE WIDTH: FULL</span>
-                <span className="practice-badge">BEAT LINE: 1/4 · 비트 {config.subdivision}</span>
+                {spec.railBadges(config).map((badge) => (
+                  <span key={badge} className="practice-badge">{badge}</span>
+                ))}
               </div>
             </div>
 
-            <div className="practice-rail" style={{ height: `${RAIL_HEIGHT_PX}px` }}>
+            <div className={`practice-rail${pattern === "druruk" && config.drurukKeyCount === 6 ? " is-six" : ""}`} style={{ height: `${RAIL_HEIGHT_PX}px` }}>
               {beatGuideLines.map((line) => {
                 const y = getTimelineCenterY(line.time, elapsedMs, travelMs);
+                if (y < -4 || y > RAIL_HEIGHT_PX) return null;
 
-                if (y < -4 || y > RAIL_HEIGHT_PX) {
-                  return null;
-                }
-
-                return (
-                  <div
-                    key={line.id}
-                    className={`practice-beat-line${line.isMeasure ? " is-measure" : ""}`}
-                    style={{ top: `${y}px` }}
-                  />
-                );
+                return <div key={line.id} className={`practice-beat-line${line.isMeasure ? " is-measure" : ""}`} style={{ top: `${y}px` }} />;
               })}
 
-              {PRACTICE_LANES.map((lane) => {
+              {laneIndexes.map((lane) => {
                 const laneNotes = notes.filter((note) => note.lane === lane);
-                const laneKey =
-                  lane === ACTIVE_TRILL_LANES[0]
-                    ? config.leftKey
-                    : lane === ACTIVE_TRILL_LANES[1]
-                      ? config.rightKey
-                      : null;
+                const laneKey = config.keyBindings[lane] ?? null;
+                const isActiveLane = activeLanes.includes(lane);
 
                 return (
-                  <div
-                    key={lane}
-                    className={`practice-lane${ACTIVE_TRILL_LANES.includes(lane) ? " is-active" : " is-inactive"}`}
-                  >
+                  <div key={lane} className={`practice-lane${isActiveLane ? " is-active" : " is-inactive"}${nextExpectedLane === lane && gameState === "playing" ? " is-next" : ""}`}>
                     <div className="practice-lane-top">
-                      <span>LANE {lane + 1}</span>
+                      <span>{spec.laneLabel(lane, config)}</span>
                       <strong>{laneKey ? formatKeyLabel(laneKey) : "-"}</strong>
                     </div>
 
-                    {lanePressEffects.some((effect) => effect.lane === lane) && <div className="practice-lane-press-effect" />}
+                    {lanePressEffects.some((effect) => effect.lane === lane) ? <div className="practice-lane-press-effect" /> : null}
 
-                    {laneJudgmentFeedbacks
-                      .filter((feedback) => feedback.lane === lane)
-                      .map((feedback) => (
-                        <div
-                          key={feedback.id}
-                          className={`practice-lane-feedback is-${feedback.judgment}`}
-                          aria-live="off"
-                        >
-                          <strong>{feedback.judgment.toUpperCase()}</strong>
-                          <span>{feedback.signedMs}</span>
-                          <small>{feedback.timingLabel}</small>
-                        </div>
-                      ))}
+                    <div className="practice-lane-feedback-anchor" style={{ top: `${JUDGMENT_LINE_Y}px` }} aria-hidden="true">
+                      {laneJudgmentFeedbacks
+                        .filter((feedback) => feedback.lane === lane)
+                        .map((feedback) => (
+                          <div key={feedback.id} className={`practice-lane-feedback is-${feedback.judgment}`} aria-live="off">
+                            <strong>{feedback.judgment.toUpperCase()}</strong>
+                            <span>{feedback.signedMs}</span>
+                            <small>{feedback.timingLabel}</small>
+                          </div>
+                        ))}
+                    </div>
 
                     {laneNotes.map((note) => {
-                      const y =
-                        getTimelineCenterY(note.time, elapsedMs, travelMs) - NOTE_HEIGHT_PX / 2;
+                      const y = getTimelineCenterY(note.time, elapsedMs, travelMs) - NOTE_HEIGHT_PX / 2;
+                      if (y < -NOTE_HEIGHT_PX || y > RAIL_HEIGHT_PX) return null;
 
-                      if (y < -NOTE_HEIGHT_PX || y > RAIL_HEIGHT_PX) {
-                        return null;
-                      }
-
-                      return (
-                        <div
-                          key={note.id}
-                          className={`practice-note${note.judged ? ` is-${note.judgment}` : ""}`}
-                          style={{
-                            top: `${y}px`,
-                            height: `${NOTE_HEIGHT_PX}px`,
-                          }}
-                        />
-                      );
+                      return <div key={note.id} className={`practice-note${note.judged ? ` is-${note.judgment}` : ""}`} style={{ top: `${y}px`, height: `${NOTE_HEIGHT_PX}px` }} />;
                     })}
 
-                    {hitEffects
-                      .filter((effect) => effect.lane === lane)
-                      .map((effect) => (
-                        <div key={effect.id} className="practice-hit-effect">
-                          <span className="practice-hit-spark practice-hit-spark-center" />
-                          <span className="practice-hit-spark practice-hit-spark-left" />
-                          <span className="practice-hit-spark practice-hit-spark-right" />
-                        </div>
-                      ))}
+                    {hitEffects.filter((effect) => effect.lane === lane).map((effect) => (
+                      <div key={effect.id} className="practice-hit-effect">
+                        <span className="practice-hit-spark practice-hit-spark-center" />
+                        <span className="practice-hit-spark practice-hit-spark-left" />
+                        <span className="practice-hit-spark practice-hit-spark-right" />
+                      </div>
+                    ))}
 
                     <div className="practice-key-floor">{laneKey ? formatKeyLabel(laneKey) : ""}</div>
                   </div>
@@ -912,18 +968,11 @@ export default function PracticePage() {
             </div>
 
             <div className="practice-rail-help">
-              {gameState === "playing" ? (
-                leadInRemaining > 0 ? (
-                  <span>시작 준비... {leadInRemaining}</span>
-                ) : (
-                  <span>
-                    중앙 2레인에 맞춰 <strong>{formatKeyLabel(config.leftKey)}</strong> /{" "}
-                    <strong>{formatKeyLabel(config.rightKey)}</strong> 를 번갈아 눌러주세요.
-                  </span>
-                )
-              ) : (
-                <span>연습을 시작하면 중앙 2레인에서 트릴 노트가 떨어져요.</span>
-              )}
+              {gameState === "playing"
+                ? leadInRemaining > 0
+                  ? <span>시작 준비... {leadInRemaining}</span>
+                  : <span>{spec.helpPlaying(config)}</span>
+                : <span>{typeof spec.helpIdle === "function" ? spec.helpIdle(config) : spec.helpIdle}</span>}
             </div>
           </article>
 
@@ -969,6 +1018,12 @@ export default function PracticePage() {
               </div>
             </div>
 
+            <div className="practice-next-box">
+              <span className="key-label">다음 입력</span>
+              <strong>{formatKeyLabel(config.keyBindings[nextExpectedLane] ?? config.keyBindings[0] ?? "-")}</strong>
+              <small>{spec.laneLabel(nextExpectedLane, config)}</small>
+            </div>
+
             <div className="practice-judgment-number-grid">
               <article className="practice-judgment-number-card is-perfect">
                 <span>PERFECT</span>
@@ -994,14 +1049,14 @@ export default function PracticePage() {
               <small>{remainingNotes > 0 ? `남은 노트 ${remainingNotes}` : "모든 노트 판정 완료"}</small>
             </div>
 
-            {gameState === "ended" && (
+            {gameState === "ended" ? (
               <div className="practice-end-box">
                 <h3>연습 종료</h3>
                 <p>
                   최대 콤보 <strong>{stats.maxCombo}</strong> · 정확도 <strong>{accuracy.toFixed(1)}%</strong>
                 </p>
               </div>
-            )}
+            ) : null}
           </aside>
         </section>
       </section>
@@ -1014,6 +1069,28 @@ export default function PracticePage() {
           gap: 18px;
         }
 
+        .practice-pattern-tabs {
+          display: flex;
+          gap: 10px;
+          flex-wrap: wrap;
+        }
+
+        .practice-pattern-tab {
+          border-radius: 999px;
+          border: 1px solid var(--line);
+          padding: 8px 14px;
+          color: var(--muted);
+          text-decoration: none;
+          font-weight: 700;
+          transition: border-color 140ms ease, color 140ms ease, background 140ms ease;
+        }
+
+        .practice-pattern-tab.is-active {
+          border-color: rgba(100, 245, 231, 0.46);
+          color: var(--accent-strong);
+          background: rgba(57, 197, 187, 0.12);
+        }
+
         .practice-control-header,
         .practice-rail-header {
           display: flex;
@@ -1023,7 +1100,8 @@ export default function PracticePage() {
           flex-wrap: wrap;
         }
 
-        .practice-config-grid {
+        .practice-config-grid,
+        .practice-key-grid {
           display: grid;
           grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
           gap: 12px;
@@ -1083,7 +1161,8 @@ export default function PracticePage() {
 
         .ghost-action-button:hover,
         .key-value-button:hover,
-        .practice-input:hover {
+        .practice-input:hover,
+        .practice-pattern-tab:hover {
           border-color: rgba(100, 245, 231, 0.46);
         }
 
@@ -1122,6 +1201,10 @@ export default function PracticePage() {
           padding: 14px;
         }
 
+        .practice-rail.is-six {
+          grid-template-columns: repeat(6, minmax(0, 1fr));
+        }
+
         .practice-lane {
           position: relative;
           border-radius: 16px;
@@ -1138,6 +1221,10 @@ export default function PracticePage() {
 
         .practice-lane.is-inactive {
           opacity: 0.55;
+        }
+
+        .practice-lane.is-next {
+          box-shadow: inset 0 0 0 1px rgba(255, 243, 176, 0.32);
         }
 
         .practice-lane-press-effect {
@@ -1165,11 +1252,19 @@ export default function PracticePage() {
           z-index: 2;
         }
 
-        .practice-lane-feedback {
+        .practice-lane-feedback-anchor {
           position: absolute;
           left: 10px;
           right: 10px;
-          top: ${JUDGMENT_LINE_Y - 62}px;
+          pointer-events: none;
+          z-index: 5;
+        }
+
+        .practice-lane-feedback {
+          position: absolute;
+          left: 0;
+          right: 0;
+          bottom: ${LANE_FEEDBACK_GAP_PX}px;
           display: grid;
           gap: 3px;
           justify-items: center;
@@ -1358,6 +1453,7 @@ export default function PracticePage() {
         }
 
         .practice-summary-box,
+        .practice-next-box,
         .practice-end-box {
           border-radius: 18px;
           border: 1px solid var(--line);
@@ -1371,11 +1467,16 @@ export default function PracticePage() {
           grid-template-columns: repeat(2, minmax(0, 1fr));
         }
 
+        .practice-next-box strong,
         .practice-summary-box strong,
         .practice-end-box strong {
           display: block;
           margin-top: 4px;
           font-size: 1.15rem;
+        }
+
+        .practice-next-box small {
+          color: var(--muted);
         }
 
         .practice-judgment-number-grid {
@@ -1484,11 +1585,13 @@ export default function PracticePage() {
 
         @media (max-width: 640px) {
           .practice-config-grid,
+          .practice-key-grid,
           .practice-summary-box {
             grid-template-columns: 1fr;
           }
 
-          .practice-rail {
+          .practice-rail,
+          .practice-rail.is-six {
             gap: 6px;
             padding: 10px;
           }

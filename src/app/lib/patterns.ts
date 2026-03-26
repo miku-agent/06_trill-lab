@@ -20,7 +20,7 @@ export const PATTERN_DEFINITIONS: PatternDefinition[] = [
     key: "druruk",
     label: "드르륵",
     shortLabel: "드르륵",
-    description: "1234 또는 4321 모드로 4키 입력 속도와 안정감을 측정해요.",
+    description: "4키(1234 / 4321) 또는 6키(123456 / 654321) 입력 속도와 안정감을 측정해요.",
     href: "/measure?pattern=druruk",
   },
   {

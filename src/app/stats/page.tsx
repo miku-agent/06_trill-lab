@@ -41,7 +41,7 @@ type StatMetric = {
 
 const FILTER_LINKS: Array<{ label: string; href: string; description: string }> = [
   { label: "트릴", href: "/stats?pattern=trill", description: "왼손 · 오른손 · 양손 기록을 한눈에 봐요." },
-  { label: "드르륵", href: "/stats?pattern=druruk", description: "1234 / 4321 단계 기록을 비교해요." },
+  { label: "드르륵", href: "/stats?pattern=druruk", description: "4키 1234 / 4321, 6키 123456 / 654321 기록을 비교해요." },
   { label: "연타", href: "/stats?pattern=yeonta", description: "전환 딜레이와 안정감을 확인해요." },
 ];
 
@@ -106,9 +106,11 @@ function StatsPageContent() {
     return patternHistory.filter((entry) => {
       if (!activeVariant) return true;
       if (activePattern === "druruk") {
-        if (activeVariant === "1234" && !(entry.variant === "1234" || entry.variant === "left")) return false;
-        if (activeVariant === "4321" && !(entry.variant === "4321" || entry.variant === "right")) return false;
         if (activeVariant === "both") return false;
+        if (activeVariant === "1234" && entry.variant !== "1234") return false;
+        if (activeVariant === "4321" && entry.variant !== "4321") return false;
+        if (activeVariant === "123456" && !(entry.variant === "123456" || entry.variant === "left")) return false;
+        if (activeVariant === "654321" && !(entry.variant === "654321" || entry.variant === "right")) return false;
       } else if (entry.variant !== activeVariant) {
         return false;
       }
@@ -513,7 +515,7 @@ function StatCard({ label, value, compact = false }: { label: string; value: str
 }
 
 function isMeasureVariant(value: string | null): value is MeasureVariant {
-  return value === "left" || value === "right" || value === "both" || value === "1234" || value === "4321";
+  return value === "left" || value === "right" || value === "both" || value === "1234" || value === "4321" || value === "123456" || value === "654321";
 }
 
 function average(values: number[]) {

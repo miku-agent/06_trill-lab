@@ -11,14 +11,23 @@ import {
   type MeasureVariant,
 } from "../lib/measure-history";
 import { getPatternDefinition, type PatternKey } from "../lib/patterns";
+import {
+  getDefaultDrurukVariant,
+  getDrurukKeyHints,
+  getDrurukKeyLabels,
+  getDrurukProfile,
+  getDrurukVariantsByKeyCount,
+  isDrurukVariant,
+  type DrurukKeyCount,
+} from "../lib/druruk";
 
 type SessionState = "idle" | "countdown" | "running" | "finished";
-type KeyCaptureTarget = "key1" | "key2" | "key3" | "key4" | null;
+type KeyCaptureTarget = `key${number}` | null;
 type MeasurePreset = {
   key: MeasureVariant;
   title: string;
   description: string;
-  defaultKeys: [string, string];
+  defaultKeys: string[];
 };
 
 type PatternMode = {
@@ -33,18 +42,13 @@ type PatternMode = {
 const COUNTDOWN_SECONDS = 3;
 const TEST_SECONDS = 10;
 const FORBIDDEN_CAPTURE_KEYS = new Set(["ESC", "TAB", "ENTER", "CMD", "CTRL", "ALT", "SHIFT"]);
-const CAPTURE_TARGETS: Exclude<KeyCaptureTarget, null>[] = ["key1", "key2", "key3", "key4"];
+const CAPTURE_TARGETS: Exclude<KeyCaptureTarget, null>[] = ["key1", "key2", "key3", "key4", "key5", "key6"];
 const CHART_CEILING_OPTIONS = [120, 180, 240, 300] as const;
 
 const MEASURE_PRESETS: MeasurePreset[] = [
   { key: "left", title: "왼손 모드", description: "왼손 두 키로 한손 트릴을 측정해요.", defaultKeys: ["A", "S"] },
   { key: "right", title: "오른손 모드", description: "오른손 두 키로 한손 트릴을 측정해요.", defaultKeys: ["K", "L"] },
   { key: "both", title: "양손 모드", description: "좌/우 손 분리 키로 일반적인 교대 트릴을 측정해요.", defaultKeys: ["A", "L"] },
-];
-
-const DRURUK_PRESETS: MeasurePreset[] = [
-  { key: "1234", title: "1234 모드", description: "A → S → ; → ' 순서로 입력해요.", defaultKeys: ["A", "S"] },
-  { key: "4321", title: "4321 모드", description: "' → ; → S → A 순서로 입력해요.", defaultKeys: ["'", ";"] },
 ];
 
 const PATTERN_MODES: Record<PatternKey, PatternMode> = {
@@ -59,10 +63,10 @@ const PATTERN_MODES: Record<PatternKey, PatternMode> = {
   druruk: {
     key: "druruk",
     title: "드르륵 측정",
-    description: "1234 또는 4321 한 방향 패턴으로 4키 입력 속도와 안정감을 측정해요.",
-    keyLabels: ["1번 키", "2번 키", "3번 키", "4번 키"],
-    keyHints: ["예: A", "예: S", "예: ;", "예: '"],
-    sequence: (keys) => [keys[0], keys[1], keys[2], keys[3]],
+    description: "4키/6키 한 방향 패턴으로 입력 속도와 안정감을 측정해요.",
+    keyLabels: [],
+    keyHints: [],
+    sequence: (keys) => keys,
   },
   yeonta: {
     key: "yeonta",
@@ -133,23 +137,34 @@ function normalizeKeyboardEvent(event: KeyboardEvent) {
   return normalizeKey(key);
 }
 
-function getPresetConfig(variant: MeasureVariant, pattern: PatternKey) {
-  const presets = pattern === "druruk" ? DRURUK_PRESETS : MEASURE_PRESETS;
-  return presets.find((preset) => preset.key === variant) ?? presets[0];
+function getPresetConfig(variant: MeasureVariant, pattern: PatternKey, drurukKeyCount: DrurukKeyCount = 6) {
+  if (pattern === "druruk") {
+    const presets = getDrurukVariantsByKeyCount(drurukKeyCount).map((drurukVariant) => {
+      const profile = getDrurukProfile(drurukVariant);
+      return {
+        key: drurukVariant,
+        title: profile.title,
+        description: profile.description,
+        defaultKeys: profile.defaultKeys,
+      } satisfies MeasurePreset;
+    });
+
+    return presets.find((preset) => preset.key === variant) ?? presets[0];
+  }
+
+  return MEASURE_PRESETS.find((preset) => preset.key === variant) ?? MEASURE_PRESETS[0];
 }
 
 function getDefaultKeys(pattern: PatternKey, variant: MeasureVariant, activePreset: MeasurePreset) {
   if (pattern === "yeonta") {
-    return ["A", "S", ";", "'"] as [string, string, string, string];
+    return ["A", "S", ";", "'"];
   }
 
-  if (pattern === "druruk") {
-    return variant === "4321"
-      ? (["'", ";", "S", "A"] as [string, string, string, string])
-      : (["A", "S", ";", "'"] as [string, string, string, string]);
+  if (pattern === "druruk" && isDrurukVariant(variant)) {
+    return getDrurukProfile(variant).defaultKeys;
   }
 
-  return [activePreset.defaultKeys[0], activePreset.defaultKeys[1], "S", "K"] as [string, string, string, string];
+  return [activePreset.defaultKeys[0] ?? "A", activePreset.defaultKeys[1] ?? "L", "S", "K"];
 }
 
 type AnalyticsPayload = Record<string, string | number | boolean | null | undefined>;
@@ -179,8 +194,9 @@ function MeasurePageContent() {
   const pattern = getPatternDefinition(searchParams.get("pattern")).key;
   const mode = PATTERN_MODES[pattern];
 
-  const [selectedVariant, setSelectedVariant] = useState<MeasureVariant>(pattern === "druruk" ? "1234" : "both");
-  const [keys, setKeys] = useState<[string, string, string, string]>(["A", "L", "S", "K"]);
+  const [drurukKeyCount, setDrurukKeyCount] = useState<DrurukKeyCount>(6);
+  const [selectedVariant, setSelectedVariant] = useState<MeasureVariant>(pattern === "druruk" ? getDefaultDrurukVariant(6) : "both");
+  const [keys, setKeys] = useState<string[]>(["A", "L", "S", "K"]);
   const [keyCaptureTarget, setKeyCaptureTarget] = useState<KeyCaptureTarget>(null);
   const [sessionState, setSessionState] = useState<SessionState>("idle");
   const [countdownLeft, setCountdownLeft] = useState(COUNTDOWN_SECONDS);
@@ -208,42 +224,48 @@ function MeasurePageContent() {
   const expectedIndexRef = useRef(0);
   const acceptedStepIndicesRef = useRef<number[]>([]);
   const currentRunTimestampsRef = useRef<number[]>([]);
-  const completedRunsRef = useRef<Array<{ durationMs: number; intervals: [number, number, number] }>>([]);
+  const completedRunsRef = useRef<Array<{ durationMs: number; intervals: number[] }>>([]);
 
   const measureVariant = useMemo<MeasureVariant>(() => {
     if (pattern === "druruk") {
-      return selectedVariant === "4321" ? "4321" : "1234";
+      return isDrurukVariant(selectedVariant) ? selectedVariant : getDefaultDrurukVariant(drurukKeyCount);
     }
     if (selectedVariant === "left" || selectedVariant === "right") return selectedVariant;
     return "both";
-  }, [pattern, selectedVariant]);
+  }, [drurukKeyCount, pattern, selectedVariant]);
 
-  const activePreset = getPresetConfig(measureVariant, pattern);
+  const activePreset = getPresetConfig(measureVariant, pattern, drurukKeyCount);
+  const drurukProfile = pattern === "druruk" && isDrurukVariant(measureVariant) ? getDrurukProfile(measureVariant) : null;
   const configuredKeys = useMemo(() => keys.map((value) => normalizeKey(value)), [keys]);
-  const activeKeys = pattern === "trill" ? configuredKeys.slice(0, 2) : configuredKeys;
+  const activeKeys = useMemo(
+    () => (pattern === "trill" ? configuredKeys.slice(0, 2) : pattern === "druruk" && drurukProfile ? configuredKeys.slice(0, drurukProfile.keyCount) : configuredKeys),
+    [configuredKeys, drurukProfile, pattern],
+  );
   const expectedSequence = useMemo(() => mode.sequence(activeKeys, measureVariant), [activeKeys, measureVariant, mode]);
   const expectedPadIndex = useMemo(() => {
     const nextKey = expectedSequence[sequenceIndex] ?? expectedSequence[0];
     return activeKeys.findIndex((key) => key === nextKey);
   }, [activeKeys, expectedSequence, sequenceIndex]);
+  const visibleKeyLabels = pattern === "druruk" && drurukProfile ? getDrurukKeyLabels(drurukProfile.keyCount) : mode.keyLabels;
+  const visibleKeyHints = pattern === "druruk" && drurukProfile ? getDrurukKeyHints(drurukProfile.keyCount) : mode.keyHints;
   const hasValidKeyConfig = useMemo(() => {
     const unique = new Set(activeKeys.filter(Boolean));
-    return activeKeys.length === mode.keyLabels.length && unique.size === activeKeys.length;
-  }, [activeKeys, mode.keyLabels.length]);
+    return activeKeys.length === visibleKeyLabels.length && unique.size === activeKeys.length;
+  }, [activeKeys, visibleKeyLabels.length]);
 
   const helperText = useMemo(() => {
-    if (keyCaptureTarget) return `${mode.keyLabels[CAPTURE_TARGETS.indexOf(keyCaptureTarget)]}를 기다리는 중이에요. 아무 키나 눌러주세요.`;
+    if (keyCaptureTarget) return `${visibleKeyLabels[CAPTURE_TARGETS.indexOf(keyCaptureTarget)]}를 기다리는 중이에요. 아무 키나 눌러주세요.`;
     if (captureError) return captureError;
     if (!hasValidKeyConfig) return "중복 없이 서로 다른 키를 설정해야 측정을 시작할 수 있어요.";
     if (sessionState === "countdown") return `준비... ${countdownLeft}초 후 시작`;
     if (sessionState === "running") return `현재 순서: ${expectedSequence[sequenceIndex] ?? expectedSequence[0]}`;
     if (result) {
-      if (pattern === "druruk") return "선택한 모드 순서를 유지할수록 더 높은 점수가 나와요.";
+      if (pattern === "druruk") return `${drurukProfile?.keyCount ?? 6}키 ${drurukProfile?.sequenceLabel ?? ""} 순서를 유지할수록 더 높은 점수가 나와요.`;
       if (pattern === "yeonta") return "각 키를 4번씩 끊지 않고 정확하게 이어갈수록 더 높은 점수가 나와요.";
       return "같은 키 반복은 invalid 처리돼요. 정확도를 유지하면서 BPM을 끌어올려보세요.";
     }
-    return `${mode.title} · ${activeKeys.join(" / ")}`;
-  }, [captureError, countdownLeft, expectedSequence, hasValidKeyConfig, keyCaptureTarget, mode, pattern, result, sequenceIndex, sessionState, activeKeys]);
+    return `${pattern === "druruk" ? `드르륵 ${drurukProfile?.title ?? ""}` : mode.title} · ${activeKeys.join(" / ")}`;
+  }, [activeKeys, captureError, countdownLeft, drurukProfile, expectedSequence, hasValidKeyConfig, keyCaptureTarget, mode, pattern, result, sequenceIndex, sessionState, visibleKeyLabels]);
 
   const triggerPadFeedback = useCallback((index: number) => {
     if (activePadTimeoutRef.current) window.clearTimeout(activePadTimeoutRef.current);
@@ -379,17 +401,18 @@ function MeasurePageContent() {
   ]);
 
   useEffect(() => {
+    if (sessionState !== "idle") return;
+
     const nextKeys = getDefaultKeys(pattern, measureVariant, activePreset);
 
     const timer = window.setTimeout(() => {
       setKeys(nextKeys);
       setKeyCaptureTarget(null);
-      setSessionState("idle");
       resetStats();
     }, 0);
 
     return () => window.clearTimeout(timer);
-  }, [activePreset, measureVariant, pattern, resetStats]);
+  }, [activePreset, measureVariant, pattern, resetStats, sessionState]);
 
   useEffect(() => {
     if (sessionState !== "countdown") return;
@@ -454,7 +477,7 @@ function MeasurePageContent() {
         }
         setCaptureError(null);
         setKeys((current) => {
-          const next = [...current] as [string, string, string, string];
+          const next = [...current];
           next[CAPTURE_TARGETS.indexOf(keyCaptureTarget)] = pressedKey;
           return next;
         });
@@ -489,11 +512,7 @@ function MeasurePageContent() {
               ...completedRunsRef.current,
               {
                 durationMs: runTimestamps[runTimestamps.length - 1] - runTimestamps[0],
-                intervals: [
-                  runTimestamps[1] - runTimestamps[0],
-                  runTimestamps[2] - runTimestamps[1],
-                  runTimestamps[3] - runTimestamps[2],
-                ],
+                intervals: runTimestamps.slice(1).map((timestamp, index) => timestamp - runTimestamps[index]),
               },
             ];
             currentRunTimestampsRef.current = [];
@@ -549,7 +568,7 @@ function MeasurePageContent() {
   }
 
   function applyPreset(variant: MeasureVariant) {
-    const preset = getPresetConfig(variant, pattern);
+    const preset = getPresetConfig(variant, pattern, drurukKeyCount);
     setSelectedVariant(variant);
     setKeys(getDefaultKeys(pattern, variant, preset));
     setKeyCaptureTarget(null);
@@ -587,7 +606,7 @@ function MeasurePageContent() {
       ) : null}
 
       <section className="page-section compact-hero">
-        <h1 className="page-title">{mode.title}</h1>
+        <h1 className="page-title">{pattern === "druruk" && drurukProfile ? `${drurukProfile.keyCount}키 드르륵 측정` : mode.title}</h1>
         <div className="status-pill">{statusLabel}</div>
       </section>
 
@@ -615,8 +634,36 @@ function MeasurePageContent() {
             ) : (
               <>
                 <p className="section-label">모드 선택</p>
+                {pattern === "druruk" ? (
+                  <div className="preset-grid">
+                    {[4, 6].map((count) => (
+                      <button
+                        key={`druruk-count-${count}`}
+                        onClick={() => {
+                          const nextCount = count as DrurukKeyCount;
+                          setDrurukKeyCount(nextCount);
+                          setSelectedVariant(getDefaultDrurukVariant(nextCount));
+                        }}
+                        disabled={sessionState === "countdown" || sessionState === "running"}
+                        className={`preset-card ${drurukKeyCount === count ? "is-active" : ""}`}
+                      >
+                        <strong>{count}키</strong>
+                        <span>{count === 4 ? "1234 / 4321 계열을 측정해요." : "123456 / 654321 계열을 측정해요."}</span>
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
                 <div className="preset-grid">
-                  {(pattern === "trill" ? MEASURE_PRESETS : DRURUK_PRESETS).map((preset) => {
+                  {(pattern === "trill"
+                    ? MEASURE_PRESETS
+                    : pattern === "druruk"
+                      ? getDrurukVariantsByKeyCount(drurukKeyCount).map((variant) => ({
+                          key: variant,
+                          title: getDrurukProfile(variant).title,
+                          description: getDrurukProfile(variant).description,
+                          defaultKeys: getDrurukProfile(variant).defaultKeys,
+                        }))
+                      : []).map((preset) => {
                     const isActive = preset.key === measureVariant;
                     return (
                       <button
@@ -633,7 +680,7 @@ function MeasurePageContent() {
                 </div>
                 {pattern === "druruk" ? (
                   <>
-                    <p className="section-subtitle">{mode.description}</p>
+                    <p className="section-subtitle">{drurukProfile ? `${drurukProfile.keyCount}키 ${drurukProfile.sequenceLabel} 패턴을 측정해요.` : mode.description}</p>
                     <div className="sequence-preview">
                       {expectedSequence.map((key, index) => (
                         <span key={`${key}-${index}`} className="sequence-chip">{key}</span>
@@ -651,9 +698,9 @@ function MeasurePageContent() {
               {activeKeys.map((value, index) => (
                 <KeySettingCard
                   key={`${mode.key}-${index}`}
-                  label={mode.keyLabels[index]}
+                  label={visibleKeyLabels[index]}
                   value={value}
-                  hint={mode.keyHints[index]}
+                  hint={visibleKeyHints[index]}
                   isCapturing={keyCaptureTarget === CAPTURE_TARGETS[index]}
                   onStartCapture={() => beginKeyCapture(CAPTURE_TARGETS[index])}
                   disabled={sessionState === "countdown" || sessionState === "running"}
@@ -661,7 +708,7 @@ function MeasurePageContent() {
               ))}
             </div>
             <p className={`inline-note ${captureError || !hasValidKeyConfig ? "is-danger" : ""}`}>
-              {captureError ?? (hasValidKeyConfig ? `현재 ${activeKeys.join(" / ")} 조합으로 측정해요.` : "중복 없이 서로 다른 키를 설정해야 측정을 시작할 수 있어요.")}
+              {captureError ?? (hasValidKeyConfig ? `현재 ${drurukProfile ? `${drurukProfile.keyCount}키 ` : ""}${activeKeys.join(" / ")} 조합으로 측정해요.` : "중복 없이 서로 다른 키를 설정해야 측정을 시작할 수 있어요.")}
             </p>
           </div>
 
@@ -688,11 +735,11 @@ function MeasurePageContent() {
                   {hitFeedback === "good" ? "성공" : hitFeedback === "miss" ? "실수" : "준비 완료"}
                 </span>
               </div>
-              <div className={`pad-grid compact-pad-grid ${pattern === "druruk" ? "is-four" : ""}`}>
+              <div className={`pad-grid compact-pad-grid ${pattern === "druruk" && drurukProfile?.keyCount === 6 ? "is-six" : ""}`}>
                 {activeKeys.map((value, index) => (
                   <RhythmPad
                     key={`${value}-${index}`}
-                    label={mode.keyLabels[index]}
+                    label={visibleKeyLabels[index]}
                     value={value}
                     isActive={activePadIndex === index}
                     isExpected={expectedPadIndex === index && sessionState !== "countdown"}
@@ -701,7 +748,7 @@ function MeasurePageContent() {
                 ))}
               </div>
               {pattern === "druruk" ? (
-                <p className="section-subtitle">다음 입력: <strong>{expectedSequence[sequenceIndex] ?? expectedSequence[0]}</strong></p>
+                <p className="section-subtitle">다음 입력: <strong>{expectedSequence[sequenceIndex] ?? expectedSequence[0]}</strong>{pattern === "druruk" && drurukProfile ? ` · ${drurukProfile.sequenceLabel}` : ""}</p>
               ) : null}
             </div>
           </article>
@@ -730,7 +777,7 @@ function MeasurePageContent() {
             <p className="section-subtitle">
               {result
                 ? pattern === "druruk"
-                  ? `평균 드르륵 ${formatMs(result.druruk?.averageRunDurationMs ?? null)} · 단계 간격 표준편차 ${formatMs(result.druruk?.stepIntervalStdDevMs ?? null)} · 참고 BPM ${result.bpm}`
+                  ? `${drurukProfile?.keyCount ?? 6}키 평균 드르륵 ${formatMs(result.druruk?.averageRunDurationMs ?? null)} · 단계 간격 표준편차 ${formatMs(result.druruk?.stepIntervalStdDevMs ?? null)} · 참고 BPM ${result.bpm}`
                   : pattern === "yeonta"
                     ? `전환 딜레이 ${formatMs(result.yeonta?.averageTransitionIntervalMs ?? null)} · 정확도 ${formatPercent(result.accuracy)} · 최대 스트릭 ${result.peakStreak}`
                     : `정확도 ${formatPercent(result.accuracy)} · 유효 ${result.validHits} · 무효 ${result.invalidHits} · 최대 스트릭 ${result.peakStreak}`

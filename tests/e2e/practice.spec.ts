@@ -158,11 +158,17 @@ test.describe("/practice", () => {
     await expect(page.locator(".practice-judgment-number-card.is-perfect strong")).toHaveText("1");
     await expect(page.locator(".practice-judgment-toast strong")).toHaveText("PERFECT");
 
-    const laneFeedback = page.locator(".practice-lane").nth(1).locator(".practice-lane-feedback.is-perfect");
+    const laneFeedback = page.locator('.practice-lane-feedback.is-perfect[data-lane="1"]');
     await expect(laneFeedback).toBeVisible();
     await expect(laneFeedback.locator("strong")).toHaveText("PERFECT");
     await expect(laneFeedback.locator("span")).toHaveText("+0ms");
     await expect(laneFeedback.locator("small")).toHaveText("SLOW");
+
+    const feedbackBox = await laneFeedback.boundingBox();
+    const judgmentLine = await page.locator(".practice-judgment-line").boundingBox();
+    expect(feedbackBox).not.toBeNull();
+    expect(judgmentLine).not.toBeNull();
+    expect(Math.abs((feedbackBox?.y ?? 0) + (feedbackBox?.height ?? 0) / 2 - (judgmentLine?.y ?? 0))).toBeLessThan(48);
   });
 
   test("실제 입력으로 GOOD 판정과 lane feedback이 연결된다", async ({ page }) => {
@@ -178,7 +184,7 @@ test.describe("/practice", () => {
     await expect(page.locator(".practice-judgment-number-card.is-good strong")).toHaveText("1");
     await expect(page.locator(".practice-judgment-toast strong")).toHaveText("GOOD");
 
-    const laneFeedback = page.locator(".practice-lane").nth(2).locator(".practice-lane-feedback.is-good");
+    const laneFeedback = page.locator('.practice-lane-feedback.is-good[data-lane="2"]');
     await expect(laneFeedback).toBeVisible();
     await expect(laneFeedback.locator("strong")).toHaveText("GOOD");
     await expect(laneFeedback.locator("span")).toHaveText("+60ms");
@@ -198,7 +204,7 @@ test.describe("/practice", () => {
       },
     ]);
 
-    const laneFeedback = page.locator(".practice-lane-feedback.is-perfect");
+    const laneFeedback = page.locator('.practice-lane-feedback.is-perfect[data-lane="1"]');
     await expect(laneFeedback).toBeVisible();
     await expect(laneFeedback.locator("strong")).toHaveText("PERFECT");
     await expect(laneFeedback.locator("span")).toHaveText("-18ms");
@@ -219,7 +225,7 @@ test.describe("/practice", () => {
       },
     ]);
 
-    const laneFeedback = page.locator(".practice-lane-feedback.is-good");
+    const laneFeedback = page.locator('.practice-lane-feedback.is-good[data-lane="2"]');
     await expect(laneFeedback).toBeVisible();
     await expect(laneFeedback.locator("strong")).toHaveText("GOOD");
     await expect(laneFeedback.locator("span")).toHaveText("+45ms");
@@ -247,13 +253,13 @@ test.describe("/practice", () => {
       },
     ]);
 
-    const perfectFeedback = page.locator(".practice-lane-feedback.is-perfect");
+    const perfectFeedback = page.locator('.practice-lane-feedback.is-perfect[data-lane="1"]');
     await expect(perfectFeedback).toBeVisible();
     await expect(perfectFeedback.locator("strong")).toHaveText("PERFECT");
     await expect(perfectFeedback.locator("span")).toHaveText("+12ms");
     await expect(perfectFeedback.locator("small")).toHaveText("SLOW");
 
-    const goodFeedback = page.locator(".practice-lane-feedback.is-good");
+    const goodFeedback = page.locator('.practice-lane-feedback.is-good[data-lane="2"]');
     await expect(goodFeedback).toBeVisible();
     await expect(goodFeedback.locator("strong")).toHaveText("GOOD");
     await expect(goodFeedback.locator("span")).toHaveText("-33ms");

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import packageJson from "../../package.json";
 import Link from "next/link";
 import Script from "next/script";
 import { Suspense } from "react";
@@ -12,6 +13,7 @@ export const metadata: Metadata = {
 };
 
 const GTM_ID = "GTM-5PL4QXZC";
+const APP_VERSION = packageJson.version;
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
@@ -51,7 +53,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         <div className="site-shell">{children}</div>
         <footer className="site-footer">
           <div className="site-shell site-footer-inner">
-            <strong>Trill Lab - v0.1.0</strong>
+            <strong>{`Trill Lab - v${APP_VERSION}`}</strong>
           </div>
         </footer>
       </body>

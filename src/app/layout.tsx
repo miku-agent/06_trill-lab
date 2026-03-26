@@ -49,6 +49,11 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
           </div>
         </header>
         <div className="site-shell">{children}</div>
+        <footer className="site-footer">
+          <div className="site-shell site-footer-inner">
+            <strong>Trill Lab - v0.1.0</strong>
+          </div>
+        </footer>
       </body>
     </html>
   );

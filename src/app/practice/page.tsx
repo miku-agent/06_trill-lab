@@ -369,17 +369,7 @@ function PracticePageContent() {
   const controlledElapsedMsRef = useRef<number | null>(null);
 
   useEffect(() => {
-    setConfig(getInitialConfig(pattern));
-    setGameState("idle");
-    setNotes([]);
     notesRef.current = [];
-    setElapsedMs(0);
-    setLastFeedback(null);
-    setHitEffects([]);
-    setLanePressEffects([]);
-    setLaneJudgmentFeedbacks([]);
-    setKeyCaptureTarget(null);
-    setStats({ combo: 0, maxCombo: 0, perfect: 0, good: 0, miss: 0, totalNotes: 0 });
     controlledElapsedMsRef.current = null;
   }, [pattern]);
 

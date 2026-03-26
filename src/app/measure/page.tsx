@@ -237,7 +237,10 @@ function MeasurePageContent() {
   const activePreset = getPresetConfig(measureVariant, pattern, drurukKeyCount);
   const drurukProfile = pattern === "druruk" && isDrurukVariant(measureVariant) ? getDrurukProfile(measureVariant) : null;
   const configuredKeys = useMemo(() => keys.map((value) => normalizeKey(value)), [keys]);
-  const activeKeys = pattern === "trill" ? configuredKeys.slice(0, 2) : pattern === "druruk" && drurukProfile ? configuredKeys.slice(0, drurukProfile.keyCount) : configuredKeys;
+  const activeKeys = useMemo(
+    () => (pattern === "trill" ? configuredKeys.slice(0, 2) : pattern === "druruk" && drurukProfile ? configuredKeys.slice(0, drurukProfile.keyCount) : configuredKeys),
+    [configuredKeys, drurukProfile, pattern],
+  );
   const expectedSequence = useMemo(() => mode.sequence(activeKeys, measureVariant), [activeKeys, measureVariant, mode]);
   const expectedPadIndex = useMemo(() => {
     const nextKey = expectedSequence[sequenceIndex] ?? expectedSequence[0];

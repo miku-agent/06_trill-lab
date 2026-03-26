@@ -4,13 +4,20 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { getPatternDefinition, type PatternKey } from "@/app/lib/patterns";
+import {
+  getDefaultDrurukVariant,
+  getDrurukKeyLabels,
+  getDrurukLaneIndexes,
+  getDrurukProfile,
+  type DrurukKeyCount,
+  type DrurukDirection,
+} from "@/app/lib/druruk";
 
 type GameState = "idle" | "playing" | "ended";
 type EndMode = "firstMiss" | "timed";
 type JudgmentType = "perfect" | "good" | "miss";
 type FeedbackTone = JudgmentType | "early" | "wrong";
 type PracticePattern = Extract<PatternKey, "trill" | "druruk">;
-type DrurukDirection = "forward" | "reverse";
 type NoteSubdivision = 1 | 2 | 4 | 8 | 16 | 32;
 
 type FeedbackState = {
@@ -66,6 +73,7 @@ type GameConfig = {
   duration: number;
   keyBindings: string[];
   direction: DrurukDirection;
+  drurukKeyCount: DrurukKeyCount;
 };
 
 type GameStats = {
@@ -87,7 +95,7 @@ type PatternSpec = {
   configNote: string;
   railTitle: string;
   railBadges: (config: GameConfig) => string[];
-  helpIdle: string;
+  helpIdle: string | ((config: GameConfig) => string);
   helpPlaying: (config: GameConfig) => string;
   laneCount: number;
   activeLaneIndexes: (config: GameConfig) => number[];
@@ -122,13 +130,11 @@ const DEFAULT_CONFIG: GameConfig = {
   duration: 30,
   keyBindings: ["a", "'"],
   direction: "forward",
+  drurukKeyCount: 6,
 };
 
 const PRACTICE_PATTERN_KEYS: PracticePattern[] = ["trill", "druruk"];
 const TRILL_ACTIVE_LANES = [1, 2];
-const DRURUK_FORWARD_SEQUENCE = [0, 1, 2, 3, 4, 5];
-const DRURUK_REVERSE_SEQUENCE = [5, 4, 3, 2, 1, 0];
-
 const PRACTICE_PATTERN_SPECS: Record<PracticePattern, PatternSpec> = {
   trill: {
     key: "trill",
@@ -151,30 +157,36 @@ const PRACTICE_PATTERN_SPECS: Record<PracticePattern, PatternSpec> = {
   },
   druruk: {
     key: "druruk",
-    title: "6키 드르륵",
+    title: "드르륵",
     heroTitle: "연습 모드",
-    heroSubtitle: "6레인 계단 입력을 순방향/역방향으로 바로 연습할 수 있어요.",
-    statusLabel: "6KEY DRURUK",
-    configTitle: "6키 드르륵 세팅",
-    configNote: "6개 레인 전체를 활성화해서 순차 입력을 판정해요. 방향만 바꾸면 역계단도 바로 연습돼요.",
-    railTitle: "6레인 드르륵 레일",
-    railBadges: (config) => [
-      `ACTIVE: 6 / 6 레인`,
-      `DIR: ${config.direction === "forward" ? "1→2→3→4→5→6" : "6→5→4→3→2→1"}`,
-      `BEAT LINE: 1/4 · 비트 ${config.subdivision}`,
-    ],
-    helpIdle: "연습을 시작하면 6레인 전체에 드르륵 노트가 순서대로 떨어져요.",
+    heroSubtitle: "4키/6키 계단 입력을 순방향/역방향으로 바로 연습할 수 있어요.",
+    statusLabel: "DRURUK",
+    configTitle: "드르륵 세팅",
+    configNote: "키 수와 방향을 바꾸면 해당 계열 패턴으로 바로 판정이 바뀌어요.",
+    railTitle: "드르륵 레일",
+    railBadges: (config) => {
+      const profile = getDrurukProfile(getDefaultDrurukVariant(config.drurukKeyCount === 4 ? 4 : 6));
+      const directionLabel = config.direction === "forward"
+        ? profile.keyCount === 4 ? "1→2→3→4" : "1→2→3→4→5→6"
+        : profile.keyCount === 4 ? "4→3→2→1" : "6→5→4→3→2→1";
+      return [
+        `ACTIVE: ${config.drurukKeyCount} / ${config.drurukKeyCount} 레인`,
+        `DIR: ${directionLabel}`,
+        `BEAT LINE: 1/4 · 비트 ${config.subdivision}`,
+      ];
+    },
+    helpIdle: (config) => `${config.drurukKeyCount}레인 전체에 드르륵 노트가 순서대로 떨어져요.`,
     helpPlaying: (config) =>
       config.direction === "forward"
-        ? `왼쪽에서 오른쪽으로 ${config.keyBindings.map(formatKeyLabel).join(" → ")} 순서로 눌러주세요.`
-        : `오른쪽에서 왼쪽으로 ${[...config.keyBindings].reverse().map(formatKeyLabel).join(" → ")} 순서로 눌러주세요.`,
+        ? `${config.drurukKeyCount}키 ${config.keyBindings.map(formatKeyLabel).join(" → ")} 순서로 눌러주세요.`
+        : `${config.drurukKeyCount}키 ${config.keyBindings.slice(0, config.drurukKeyCount).reverse().map(formatKeyLabel).join(" → ")} 순서로 눌러주세요.`,
     laneCount: 6,
-    activeLaneIndexes: () => DRURUK_FORWARD_SEQUENCE,
-    defaultBindings: () => ["a", "s", "d", "j", "k", "l"],
-    sequenceFor: (config) => (config.direction === "forward" ? DRURUK_FORWARD_SEQUENCE : DRURUK_REVERSE_SEQUENCE),
-    laneLabel: (lane) => `${lane + 1}번`,
+    activeLaneIndexes: (config) => getDrurukLaneIndexes(config.drurukKeyCount, "forward"),
+    defaultBindings: (config) => getDrurukProfile(getDefaultDrurukVariant(config.drurukKeyCount)).defaultKeys.map((key) => key.toLowerCase()),
+    sequenceFor: (config) => getDrurukLaneIndexes(config.drurukKeyCount, config.direction),
+    laneLabel: (lane, config) => getDrurukKeyLabels(config.drurukKeyCount)[lane] ?? `${lane + 1}번`,
     settingsSummary: (config) =>
-      `${config.direction === "forward" ? "정방향" : "역방향"} · ${config.keyBindings.map(formatKeyLabel).join(" / ")}`,
+      `${config.drurukKeyCount}키 · ${config.direction === "forward" ? "정방향" : "역방향"} · ${config.keyBindings.map(formatKeyLabel).join(" / ")}`,
   },
 };
 
@@ -306,6 +318,7 @@ function getInitialConfig(pattern: PracticePattern): GameConfig {
     pattern,
     keyBindings: PRACTICE_PATTERN_SPECS[pattern].defaultBindings(DEFAULT_CONFIG),
     direction: "forward",
+    drurukKeyCount: 6,
   };
 }
 
@@ -825,23 +838,41 @@ function PracticePageContent() {
             </label>
 
             {pattern === "druruk" ? (
-              <label className="practice-field">
-                <span>진행 방향</span>
-                <select
-                  className="practice-input"
-                  value={config.direction}
-                  onChange={(event) => setConfig((prev) => ({ ...prev, direction: event.target.value as DrurukDirection }))}
-                  disabled={gameState === "playing"}
-                >
-                  <option value="forward">1 → 2 → 3 → 4 → 5 → 6</option>
-                  <option value="reverse">6 → 5 → 4 → 3 → 2 → 1</option>
-                </select>
-              </label>
+              <>
+                <label className="practice-field">
+                  <span>키 수</span>
+                  <select
+                    className="practice-input"
+                    value={config.drurukKeyCount}
+                    onChange={(event) => {
+                      const nextCount = Number(event.target.value) as DrurukKeyCount;
+                      const nextBindings = getDrurukProfile(getDefaultDrurukVariant(nextCount)).defaultKeys.map((key) => key.toLowerCase());
+                      setConfig((prev) => ({ ...prev, drurukKeyCount: nextCount, keyBindings: nextBindings, direction: "forward" }));
+                    }}
+                    disabled={gameState === "playing"}
+                  >
+                    <option value={4}>4키</option>
+                    <option value={6}>6키</option>
+                  </select>
+                </label>
+                <label className="practice-field">
+                  <span>진행 방향</span>
+                  <select
+                    className="practice-input"
+                    value={config.direction}
+                    onChange={(event) => setConfig((prev) => ({ ...prev, direction: event.target.value as DrurukDirection }))}
+                    disabled={gameState === "playing"}
+                  >
+                    <option value="forward">{config.drurukKeyCount === 4 ? "1 → 2 → 3 → 4" : "1 → 2 → 3 → 4 → 5 → 6"}</option>
+                    <option value="reverse">{config.drurukKeyCount === 4 ? "4 → 3 → 2 → 1" : "6 → 5 → 4 → 3 → 2 → 1"}</option>
+                  </select>
+                </label>
+              </>
             ) : null}
           </div>
 
           <div className="practice-key-grid">
-            {config.keyBindings.map((binding, index) => (
+            {config.keyBindings.slice(0, pattern === "druruk" ? config.drurukKeyCount : config.keyBindings.length).map((binding, index) => (
               <div key={`${pattern}-binding-${index}`} className="practice-field">
                 <span>{spec.laneLabel(index, config)} 키</span>
                 <button
@@ -889,7 +920,7 @@ function PracticePageContent() {
               </div>
             </div>
 
-            <div className={`practice-rail${pattern === "druruk" ? " is-six" : ""}`} style={{ height: `${RAIL_HEIGHT_PX}px` }}>
+            <div className={`practice-rail${pattern === "druruk" && config.drurukKeyCount === 6 ? " is-six" : ""}`} style={{ height: `${RAIL_HEIGHT_PX}px` }}>
               {beatGuideLines.map((line) => {
                 const y = getTimelineCenterY(line.time, elapsedMs, travelMs);
                 if (y < -4 || y > RAIL_HEIGHT_PX) return null;
@@ -947,7 +978,11 @@ function PracticePageContent() {
             </div>
 
             <div className="practice-rail-help">
-              {gameState === "playing" ? leadInRemaining > 0 ? <span>시작 준비... {leadInRemaining}</span> : <span>{spec.helpPlaying(config)}</span> : <span>{spec.helpIdle}</span>}
+              {gameState === "playing"
+                ? leadInRemaining > 0
+                  ? <span>시작 준비... {leadInRemaining}</span>
+                  : <span>{spec.helpPlaying(config)}</span>
+                : <span>{typeof spec.helpIdle === "function" ? spec.helpIdle(config) : spec.helpIdle}</span>}
             </div>
           </article>
 

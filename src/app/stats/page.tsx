@@ -41,7 +41,7 @@ type StatMetric = {
 
 const FILTER_LINKS: Array<{ label: string; href: string; description: string }> = [
   { label: "트릴", href: "/stats?pattern=trill", description: "왼손 · 오른손 · 양손 기록을 한눈에 봐요." },
-  { label: "드르륵", href: "/stats?pattern=druruk", description: "1234 / 4321 단계 기록을 비교해요." },
+  { label: "드르륵", href: "/stats?pattern=druruk", description: "123456 / 654321 단계 기록을 비교해요." },
   { label: "연타", href: "/stats?pattern=yeonta", description: "전환 딜레이와 안정감을 확인해요." },
 ];
 

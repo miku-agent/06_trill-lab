@@ -13,12 +13,12 @@ import {
 import { getPatternDefinition, type PatternKey } from "../lib/patterns";
 
 type SessionState = "idle" | "countdown" | "running" | "finished";
-type KeyCaptureTarget = "key1" | "key2" | "key3" | "key4" | null;
+type KeyCaptureTarget = `key${number}` | null;
 type MeasurePreset = {
   key: MeasureVariant;
   title: string;
   description: string;
-  defaultKeys: [string, string];
+  defaultKeys: string[];
 };
 
 type PatternMode = {
@@ -33,7 +33,7 @@ type PatternMode = {
 const COUNTDOWN_SECONDS = 3;
 const TEST_SECONDS = 10;
 const FORBIDDEN_CAPTURE_KEYS = new Set(["ESC", "TAB", "ENTER", "CMD", "CTRL", "ALT", "SHIFT"]);
-const CAPTURE_TARGETS: Exclude<KeyCaptureTarget, null>[] = ["key1", "key2", "key3", "key4"];
+const CAPTURE_TARGETS: Exclude<KeyCaptureTarget, null>[] = ["key1", "key2", "key3", "key4", "key5", "key6"];
 const CHART_CEILING_OPTIONS = [120, 180, 240, 300] as const;
 
 const MEASURE_PRESETS: MeasurePreset[] = [
@@ -43,8 +43,8 @@ const MEASURE_PRESETS: MeasurePreset[] = [
 ];
 
 const DRURUK_PRESETS: MeasurePreset[] = [
-  { key: "1234", title: "1234 모드", description: "A → S → ; → ' 순서로 입력해요.", defaultKeys: ["A", "S"] },
-  { key: "4321", title: "4321 모드", description: "' → ; → S → A 순서로 입력해요.", defaultKeys: ["'", ";"] },
+  { key: "1234", title: "123456 모드", description: "A → S → D → J → K → L 순서로 입력해요.", defaultKeys: ["A", "S", "D", "J", "K", "L"] },
+  { key: "4321", title: "654321 모드", description: "L → K → J → D → S → A 순서로 입력해요.", defaultKeys: ["L", "K", "J", "D", "S", "A"] },
 ];
 
 const PATTERN_MODES: Record<PatternKey, PatternMode> = {
@@ -58,11 +58,11 @@ const PATTERN_MODES: Record<PatternKey, PatternMode> = {
   },
   druruk: {
     key: "druruk",
-    title: "드르륵 측정",
-    description: "1234 또는 4321 한 방향 패턴으로 4키 입력 속도와 안정감을 측정해요.",
-    keyLabels: ["1번 키", "2번 키", "3번 키", "4번 키"],
-    keyHints: ["예: A", "예: S", "예: ;", "예: '"],
-    sequence: (keys) => [keys[0], keys[1], keys[2], keys[3]],
+    title: "6키 드르륵 측정",
+    description: "123456 또는 654321 한 방향 패턴으로 6키 입력 속도와 안정감을 측정해요.",
+    keyLabels: ["1번 키", "2번 키", "3번 키", "4번 키", "5번 키", "6번 키"],
+    keyHints: ["예: A", "예: S", "예: D", "예: J", "예: K", "예: L"],
+    sequence: (keys) => [keys[0], keys[1], keys[2], keys[3], keys[4], keys[5]],
   },
   yeonta: {
     key: "yeonta",
@@ -140,16 +140,16 @@ function getPresetConfig(variant: MeasureVariant, pattern: PatternKey) {
 
 function getDefaultKeys(pattern: PatternKey, variant: MeasureVariant, activePreset: MeasurePreset) {
   if (pattern === "yeonta") {
-    return ["A", "S", ";", "'"] as [string, string, string, string];
+    return ["A", "S", ";", "'"];
   }
 
   if (pattern === "druruk") {
     return variant === "4321"
-      ? (["'", ";", "S", "A"] as [string, string, string, string])
-      : (["A", "S", ";", "'"] as [string, string, string, string]);
+      ? ["L", "K", "J", "D", "S", "A"]
+      : ["A", "S", "D", "J", "K", "L"];
   }
 
-  return [activePreset.defaultKeys[0], activePreset.defaultKeys[1], "S", "K"] as [string, string, string, string];
+  return [activePreset.defaultKeys[0] ?? "A", activePreset.defaultKeys[1] ?? "L", "S", "K"];
 }
 
 type AnalyticsPayload = Record<string, string | number | boolean | null | undefined>;
@@ -180,7 +180,7 @@ function MeasurePageContent() {
   const mode = PATTERN_MODES[pattern];
 
   const [selectedVariant, setSelectedVariant] = useState<MeasureVariant>(pattern === "druruk" ? "1234" : "both");
-  const [keys, setKeys] = useState<[string, string, string, string]>(["A", "L", "S", "K"]);
+  const [keys, setKeys] = useState<string[]>(["A", "L", "S", "K"]);
   const [keyCaptureTarget, setKeyCaptureTarget] = useState<KeyCaptureTarget>(null);
   const [sessionState, setSessionState] = useState<SessionState>("idle");
   const [countdownLeft, setCountdownLeft] = useState(COUNTDOWN_SECONDS);
@@ -208,7 +208,7 @@ function MeasurePageContent() {
   const expectedIndexRef = useRef(0);
   const acceptedStepIndicesRef = useRef<number[]>([]);
   const currentRunTimestampsRef = useRef<number[]>([]);
-  const completedRunsRef = useRef<Array<{ durationMs: number; intervals: [number, number, number] }>>([]);
+  const completedRunsRef = useRef<Array<{ durationMs: number; intervals: number[] }>>([]);
 
   const measureVariant = useMemo<MeasureVariant>(() => {
     if (pattern === "druruk") {
@@ -454,7 +454,7 @@ function MeasurePageContent() {
         }
         setCaptureError(null);
         setKeys((current) => {
-          const next = [...current] as [string, string, string, string];
+          const next = [...current];
           next[CAPTURE_TARGETS.indexOf(keyCaptureTarget)] = pressedKey;
           return next;
         });
@@ -489,11 +489,7 @@ function MeasurePageContent() {
               ...completedRunsRef.current,
               {
                 durationMs: runTimestamps[runTimestamps.length - 1] - runTimestamps[0],
-                intervals: [
-                  runTimestamps[1] - runTimestamps[0],
-                  runTimestamps[2] - runTimestamps[1],
-                  runTimestamps[3] - runTimestamps[2],
-                ],
+                intervals: runTimestamps.slice(1).map((timestamp, index) => timestamp - runTimestamps[index]),
               },
             ];
             currentRunTimestampsRef.current = [];
@@ -688,7 +684,7 @@ function MeasurePageContent() {
                   {hitFeedback === "good" ? "성공" : hitFeedback === "miss" ? "실수" : "준비 완료"}
                 </span>
               </div>
-              <div className={`pad-grid compact-pad-grid ${pattern === "druruk" ? "is-four" : ""}`}>
+              <div className={`pad-grid compact-pad-grid ${pattern === "druruk" ? "is-six" : ""}`}>
                 {activeKeys.map((value, index) => (
                   <RhythmPad
                     key={`${value}-${index}`}

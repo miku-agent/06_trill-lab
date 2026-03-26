@@ -54,6 +54,22 @@ main {
   border-bottom: 1px solid var(--line);
 }
 
+.site-footer {
+  margin-top: 40px;
+  border-top: 1px solid rgba(159, 180, 187, 0.18);
+}
+
+.site-footer-inner {
+  min-height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  color: rgba(159, 180, 187, 0.8);
+  font-size: 13px;
+  letter-spacing: 0.02em;
+}
+
 .site-header-inner {
   min-height: 72px;
   display: flex;

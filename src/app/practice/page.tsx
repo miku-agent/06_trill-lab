@@ -40,6 +40,14 @@ type LanePressEffect = {
   activatedAt: number;
 };
 
+type LaneJudgmentFeedback = {
+  id: number;
+  lane: LaneIndex;
+  judgment: Extract<JudgmentType, "perfect" | "good">;
+  signedMs: string;
+  timingLabel: "FAST" | "SLOW";
+};
+
 type GameConfig = {
   bpm: number;
   subdivision: NoteSubdivision;
@@ -82,6 +90,7 @@ const NOTE_SPAWN_Y = 24;
 const JUDGMENT_LINE_Y = 430;
 const HIT_EFFECT_DURATION_MS = 260;
 const LANE_PRESS_EFFECT_DURATION_MS = 120;
+const LANE_FEEDBACK_DURATION_MS = 720;
 const MIN_TRAVEL_MS = 260;
 const MAX_TRAVEL_MS = 1050;
 
@@ -127,6 +136,11 @@ function matchesBinding(event: KeyboardEvent, binding: string) {
 function formatKeyLabel(key: string) {
   if (key === " ") return "SPACE";
   return key.length === 1 ? key.toUpperCase() : key.toUpperCase();
+}
+
+function formatSignedMs(deltaMs: number) {
+  const rounded = Math.round(deltaMs);
+  return `${rounded >= 0 ? "+" : ""}${rounded}ms`;
 }
 
 function getTimelineTotalMs(config: GameConfig) {
@@ -219,6 +233,7 @@ export default function PracticePage() {
   const [keyCaptureTarget, setKeyCaptureTarget] = useState<KeyCaptureTarget>(null);
   const [hitEffects, setHitEffects] = useState<HitEffect[]>([]);
   const [lanePressEffects, setLanePressEffects] = useState<LanePressEffect[]>([]);
+  const [laneJudgmentFeedbacks, setLaneJudgmentFeedbacks] = useState<LaneJudgmentFeedback[]>([]);
 
   const rootRef = useRef<HTMLElement | null>(null);
   const startAtRef = useRef(0);
@@ -226,6 +241,7 @@ export default function PracticePage() {
   const notesRef = useRef<Note[]>([]);
   const lastJudgmentTimeoutRef = useRef<number | null>(null);
   const hitEffectIdRef = useRef(0);
+  const laneFeedbackIdRef = useRef(0);
 
   const travelMs = useMemo(() => getTravelMs(config.speed), [config.speed]);
   const beatGuideLines = useMemo(() => createBeatGuideLines(config), [config]);
@@ -256,6 +272,24 @@ export default function PracticePage() {
       setLanePressEffects((prev) => prev.filter((effect) => !(effect.lane === lane && effect.activatedAt === activatedAt)));
     }, LANE_PRESS_EFFECT_DURATION_MS);
   }, []);
+
+  const spawnLaneJudgmentFeedback = useCallback(
+    (lane: LaneIndex, judgment: Extract<JudgmentType, "perfect" | "good">, deltaMs: number) => {
+      const id = laneFeedbackIdRef.current++;
+      const signedMs = formatSignedMs(deltaMs);
+      const timingLabel: "FAST" | "SLOW" = deltaMs < 0 ? "FAST" : "SLOW";
+
+      setLaneJudgmentFeedbacks((prev) => [
+        ...prev.filter((feedback) => feedback.lane !== lane),
+        { id, lane, judgment, signedMs, timingLabel },
+      ]);
+
+      window.setTimeout(() => {
+        setLaneJudgmentFeedbacks((prev) => prev.filter((feedback) => feedback.id !== id));
+      }, LANE_FEEDBACK_DURATION_MS);
+    },
+    [],
+  );
 
   const showFeedback = useCallback((label: string, tone: FeedbackTone) => {
     setLastFeedback({ label, tone });
@@ -343,6 +377,7 @@ export default function PracticePage() {
     setLastFeedback(null);
     setHitEffects([]);
     setLanePressEffects([]);
+    setLaneJudgmentFeedbacks([]);
     setGameState("playing");
     startAtRef.current = performance.now();
     window.setTimeout(() => focusPracticeRoot(), 0);
@@ -356,6 +391,7 @@ export default function PracticePage() {
     setLastFeedback(null);
     setHitEffects([]);
     setLanePressEffects([]);
+    setLaneJudgmentFeedbacks([]);
     setStats({
       combo: 0,
       maxCombo: 0,
@@ -479,6 +515,10 @@ export default function PracticePage() {
       const applied = applyJudgment(target.id, judgment, target.lane);
       if (!applied) return;
 
+      if (judgment === "perfect" || judgment === "good") {
+        spawnLaneJudgmentFeedback(target.lane, judgment, delta);
+      }
+
       if (config.endMode === "firstMiss" && judgment === "miss") {
         finishGame();
       }
@@ -486,7 +526,7 @@ export default function PracticePage() {
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [applyJudgment, config.leftKey, config.rightKey, config.endMode, finishGame, gameState, keyCaptureTarget, showFeedback, triggerLanePressEffect]);
+  }, [applyJudgment, config.leftKey, config.rightKey, config.endMode, finishGame, gameState, keyCaptureTarget, showFeedback, spawnLaneJudgmentFeedback, triggerLanePressEffect]);
 
   useEffect(() => {
     return () => {
@@ -711,6 +751,20 @@ export default function PracticePage() {
                     </div>
 
                     {lanePressEffects.some((effect) => effect.lane === lane) && <div className="practice-lane-press-effect" />}
+
+                    {laneJudgmentFeedbacks
+                      .filter((feedback) => feedback.lane === lane)
+                      .map((feedback) => (
+                        <div
+                          key={feedback.id}
+                          className={`practice-lane-feedback is-${feedback.judgment}`}
+                          aria-live="off"
+                        >
+                          <strong>{feedback.judgment.toUpperCase()}</strong>
+                          <span>{feedback.signedMs}</span>
+                          <small>{feedback.timingLabel}</small>
+                        </div>
+                      ))}
 
                     {laneNotes.map((note) => {
                       const y =
@@ -1004,6 +1058,54 @@ export default function PracticePage() {
           z-index: 2;
         }
 
+        .practice-lane-feedback {
+          position: absolute;
+          left: 10px;
+          right: 10px;
+          top: ${JUDGMENT_LINE_Y - 62}px;
+          display: grid;
+          gap: 3px;
+          justify-items: center;
+          text-align: center;
+          padding: 8px 6px;
+          border-radius: 12px;
+          border: 1px solid rgba(100, 245, 231, 0.38);
+          background: rgba(5, 16, 22, 0.84);
+          pointer-events: none;
+          z-index: 5;
+          animation: lane-feedback-rise ${LANE_FEEDBACK_DURATION_MS}ms ease-out forwards;
+        }
+
+        .practice-lane-feedback strong {
+          font-size: 13px;
+          line-height: 1;
+          letter-spacing: 0.05em;
+        }
+
+        .practice-lane-feedback span {
+          font-size: 16px;
+          font-weight: 800;
+          line-height: 1;
+        }
+
+        .practice-lane-feedback small {
+          font-size: 10px;
+          font-weight: 700;
+          letter-spacing: 0.08em;
+        }
+
+        .practice-lane-feedback.is-perfect {
+          color: #ffe27a;
+          border-color: rgba(255, 226, 122, 0.48);
+          box-shadow: 0 8px 24px rgba(255, 226, 122, 0.16);
+        }
+
+        .practice-lane-feedback.is-good {
+          color: var(--accent-strong);
+          border-color: rgba(100, 245, 231, 0.45);
+          box-shadow: 0 8px 24px rgba(100, 245, 231, 0.18);
+        }
+
         .practice-key-floor {
           position: absolute;
           left: 10px;
@@ -1086,6 +1188,21 @@ export default function PracticePage() {
           100% {
             opacity: 0;
             transform: scaleY(1.04);
+          }
+        }
+
+        @keyframes lane-feedback-rise {
+          0% {
+            opacity: 0;
+            transform: translateY(10px) scale(0.98);
+          }
+          20% {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+          }
+          100% {
+            opacity: 0;
+            transform: translateY(-14px) scale(1.02);
           }
         }
 

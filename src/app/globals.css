@@ -613,15 +613,94 @@ main {
   gap: 14px;
 }
 
+.stats-overview-grid-compact {
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+
 .stats-layout {
   display: grid;
   grid-template-columns: minmax(0, 0.9fr) minmax(320px, 1.1fr);
   gap: 14px;
+  align-items: start;
+}
+
+.section-heading-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+
+.trill-group-section {
+  display: grid;
+  gap: 14px;
+}
+
+.trill-group-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.trill-group-card {
+  display: grid;
+  gap: 14px;
+  text-align: left;
+  padding: 18px;
+  border-radius: 22px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text);
+  cursor: pointer;
+  transition: border-color 120ms ease, transform 120ms ease, background 120ms ease, box-shadow 120ms ease;
+}
+
+.trill-group-card:hover,
+.history-card:hover,
+.pattern-select-card:hover {
+  transform: translateY(-1px);
+}
+
+.trill-group-card.is-active,
+.pattern-select-card.is-active {
+  border-color: rgba(100, 245, 231, 0.72);
+  background: rgba(57, 197, 187, 0.14);
+  box-shadow: 0 10px 30px rgba(57, 197, 187, 0.12);
+}
+
+.trill-group-card-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.trill-group-card-header strong {
+  font-size: 1.15rem;
+}
+
+.trill-group-card-header span {
+  color: var(--accent-strong);
+  font-weight: 700;
+}
+
+.trill-group-card-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
 }
 
 .history-list {
   display: grid;
   gap: 10px;
+}
+
+.history-list-scroll {
+  height: 560px;
+  overflow-y: auto;
+  padding-right: 4px;
 }
 
 .history-card {
@@ -706,10 +785,17 @@ main {
   align-content: start;
 }
 
+.share-actions-row {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: stretch;
+}
+
 @media (max-width: 960px) {
   .measure-grid,
   .stats-layout,
-  .stats-overview-grid {
+  .stats-overview-grid,
+  .trill-group-grid,
+  .share-actions-row {
     grid-template-columns: 1fr;
   }
 }
@@ -722,7 +808,8 @@ main {
 
 @media (max-width: 720px) {
   .site-header-inner,
-  .compact-hero {
+  .compact-hero,
+  .section-heading-row {
     align-items: flex-start;
   }
 

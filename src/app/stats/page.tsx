@@ -8,10 +8,14 @@ import {
   formatMs,
   formatPercent,
   getPatternLabel,
+  getTrillGroupLabel,
   getVariantLabel,
+  isTrillGroupVariant,
   readMeasureHistory,
+  TRILL_GROUP_VARIANTS,
   type MeasureHistoryEntry,
   type MeasureVariant,
+  type TrillGroupVariant,
 } from "../lib/measure-history";
 import { getPatternDefinition, type PatternKey } from "../lib/patterns";
 
@@ -30,15 +34,31 @@ type StatsSummary = {
   yeontaTransitionStdDevMs: number | null;
 };
 
-const FILTER_LINKS: Array<{ label: string; href: string }> = [
-  { label: "트릴", href: "/stats?pattern=trill" },
-  { label: "드르륵", href: "/stats?pattern=druruk" },
-  { label: "연타", href: "/stats?pattern=yeonta" },
+type StatMetric = {
+  label: string;
+  value: string;
+};
+
+const FILTER_LINKS: Array<{ label: string; href: string; description: string }> = [
+  { label: "트릴", href: "/stats?pattern=trill", description: "왼손 · 오른손 · 양손 기록을 한눈에 봐요." },
+  { label: "드르륵", href: "/stats?pattern=druruk", description: "1234 / 4321 단계 기록을 비교해요." },
+  { label: "연타", href: "/stats?pattern=yeonta", description: "전환 딜레이와 안정감을 확인해요." },
 ];
 
 export default function StatsPage() {
   return (
-    <Suspense fallback={<main className="page-main"><section className="page-section"><article className="panel simple-panel"><p className="section-label">STATS</p><h1 className="section-title">통계를 불러오는 중이에요</h1></article></section></main>}>
+    <Suspense
+      fallback={
+        <main className="page-main">
+          <section className="page-section">
+            <article className="panel simple-panel">
+              <p className="section-label">STATS</p>
+              <h1 className="section-title">통계를 불러오는 중이에요</h1>
+            </article>
+          </section>
+        </main>
+      }
+    >
       <StatsPageContent />
     </Suspense>
   );
@@ -48,17 +68,22 @@ function StatsPageContent() {
   const searchParams = useSearchParams();
   const [history, setHistory] = useState<MeasureHistoryEntry[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [shareStatus, setShareStatus] = useState<string>("");
+  const [shareStatus, setShareStatus] = useState("");
 
   const patternParam = searchParams.get("pattern");
   const variantParam = searchParams.get("variant");
   const activePattern = patternParam ? getPatternDefinition(patternParam).key : null;
   const activeVariant = isMeasureVariant(variantParam) ? variantParam : null;
+  const trillGroupFromQuery = activePattern === "trill" && isTrillGroupVariant(variantParam) ? variantParam : "left";
+  const [selectedTrillGroup, setSelectedTrillGroup] = useState<TrillGroupVariant>(trillGroupFromQuery);
+
+  useEffect(() => {
+    setSelectedTrillGroup(trillGroupFromQuery);
+  }, [trillGroupFromQuery]);
 
   useEffect(() => {
     const sync = () => {
-      const next = readMeasureHistory();
-      setHistory(next);
+      setHistory(readMeasureHistory());
     };
 
     sync();
@@ -66,24 +91,44 @@ function StatsPageContent() {
     return () => window.removeEventListener("storage", sync);
   }, []);
 
+  const patternHistory = useMemo(() => {
+    if (!activePattern) return [];
+    return history.filter((entry) => entry.pattern === activePattern);
+  }, [activePattern, history]);
+
   const filteredHistory = useMemo(() => {
     if (!activePattern) return [];
 
-    return history.filter((entry) => {
-      if (entry.pattern !== activePattern) return false;
-      if (activeVariant) {
-        if (activePattern === "druruk") {
-          if (activeVariant === "1234" && !(entry.variant === "1234" || entry.variant === "left")) return false;
-          if (activeVariant === "4321" && !(entry.variant === "4321" || entry.variant === "right")) return false;
-          if (activeVariant === "both") return false;
-        } else if (entry.variant !== activeVariant) {
-          return false;
-        }
+    if (activePattern === "trill") {
+      return patternHistory.filter((entry) => entry.variant === selectedTrillGroup);
+    }
+
+    return patternHistory.filter((entry) => {
+      if (!activeVariant) return true;
+      if (activePattern === "druruk") {
+        if (activeVariant === "1234" && !(entry.variant === "1234" || entry.variant === "left")) return false;
+        if (activeVariant === "4321" && !(entry.variant === "4321" || entry.variant === "right")) return false;
+        if (activeVariant === "both") return false;
+      } else if (entry.variant !== activeVariant) {
+        return false;
       }
       return true;
     });
-  }, [activePattern, activeVariant, history]);
+  }, [activePattern, activeVariant, patternHistory, selectedTrillGroup]);
 
+  const groupSummaries = useMemo(() => {
+    if (activePattern !== "trill") return [];
+    return TRILL_GROUP_VARIANTS.map((group) => {
+      const entries = patternHistory.filter((entry) => entry.variant === group);
+      return {
+        group,
+        entries,
+        summary: buildStatsSummary(entries),
+      };
+    });
+  }, [activePattern, patternHistory]);
+
+  const summary = useMemo(() => buildStatsSummary(filteredHistory), [filteredHistory]);
   const resolvedSelectedId = useMemo(() => {
     if (!filteredHistory.length) return null;
     if (selectedId && filteredHistory.some((entry) => entry.id === selectedId)) return selectedId;
@@ -95,54 +140,8 @@ function StatsPageContent() {
     [filteredHistory, resolvedSelectedId],
   );
 
-  const summary = useMemo<StatsSummary>(() => {
-    if (filteredHistory.length === 0) {
-      return {
-        totalRuns: 0,
-        bestBpm: 0,
-        averageBpm: 0,
-        bestConsistency: 0,
-        averageAccuracy: 0,
-        completedDrurukRuns: 0,
-        averageDrurukDurationMs: null,
-        drurukDurationStdDevMs: null,
-        averageDrurukStepIntervalMs: null,
-        drurukStepIntervalStdDevMs: null,
-        averageYeontaTransitionMs: null,
-        yeontaTransitionStdDevMs: null,
-      };
-    }
-
-    const totalRuns = filteredHistory.length;
-    const bestBpm = Math.max(...filteredHistory.map((entry) => entry.result.bpm));
-    const averageBpm = Math.round(filteredHistory.reduce((sum, entry) => sum + entry.result.bpm, 0) / totalRuns);
-    const bestConsistency = Math.max(...filteredHistory.map((entry) => entry.result.consistencyScore));
-    const averageAccuracy = Math.round(filteredHistory.reduce((sum, entry) => sum + entry.result.accuracy, 0) / totalRuns);
-
-    const drurukEntries = filteredHistory.filter((entry) => entry.pattern === "druruk" && entry.result.druruk);
-    const runDurations = drurukEntries.flatMap((entry) => entry.result.druruk?.runDurations ?? []);
-    const stepIntervals = drurukEntries.flatMap((entry) => entry.result.druruk?.stepIntervals ?? []);
-    const completedDrurukRuns = drurukEntries.reduce((sum, entry) => sum + (entry.result.druruk?.completedRuns ?? 0), 0);
-    const yeontaTransitionIntervals = filteredHistory.flatMap((entry) => entry.result.yeonta?.transitionIntervals ?? []);
-
-    return {
-      totalRuns,
-      bestBpm,
-      averageBpm,
-      bestConsistency,
-      averageAccuracy,
-      completedDrurukRuns,
-      averageDrurukDurationMs: average(runDurations),
-      drurukDurationStdDevMs: standardDeviation(runDurations),
-      averageDrurukStepIntervalMs: average(stepIntervals),
-      drurukStepIntervalStdDevMs: standardDeviation(stepIntervals),
-      averageYeontaTransitionMs: average(yeontaTransitionIntervals),
-      yeontaTransitionStdDevMs: standardDeviation(yeontaTransitionIntervals),
-    };
-  }, [filteredHistory]);
-
   const recentTopRuns = useMemo(() => filteredHistory.slice(0, 3), [filteredHistory]);
-  const filterTitle = getFilterTitle(activePattern, activeVariant);
+  const filterTitle = getFilterTitle(activePattern, activePattern === "trill" ? selectedTrillGroup : activeVariant);
   const representativeIntervals = selectedRun?.pattern === "druruk"
     ? selectedRun.result.druruk?.stepIntervals ?? []
     : selectedRun?.result.intervals ?? [];
@@ -188,11 +187,16 @@ function StatsPageContent() {
     context.fillText(getShareCaption(entry), 110, 1470);
 
     downloadCanvas(canvas, getRunShareFilename(entry));
-    setShareStatus("선택한 기록 공유 이미지가 다운로드되었어요.");
+    setShareStatus("선택한 기록 이미지를 다운로드했어요.");
   }
 
   async function downloadOverallShareCard() {
-    if (filteredHistory.length === 0) return;
+    if (filteredHistory.length === 0 || !activePattern) return;
+
+    if (activePattern === "trill") {
+      downloadTrillGroupShareCard(groupSummaries);
+      return;
+    }
 
     const canvas = document.createElement("canvas");
     canvas.width = 1400;
@@ -247,7 +251,48 @@ function StatsPageContent() {
     drawIntervals(context, representativeIntervals, 100, 1485, 1200, 90);
 
     downloadCanvas(canvas, getOverallShareFilename(activePattern, activeVariant));
-    setShareStatus("현재 필터 기준 통계 이미지가 다운로드되었어요.");
+    setShareStatus("현재 필터 기준 통계 이미지를 다운로드했어요.");
+  }
+
+  function downloadTrillGroupShareCard(groups: Array<{ group: TrillGroupVariant; entries: MeasureHistoryEntry[]; summary: StatsSummary }>) {
+    const canvas = document.createElement("canvas");
+    canvas.width = 1600;
+    canvas.height = 1800;
+    const context = canvas.getContext("2d");
+    if (!context) return;
+
+    paintBackground(context, canvas.width, canvas.height);
+
+    context.fillStyle = "#64f5e7";
+    context.font = "700 34px Arial";
+    context.fillText("TRILL LAB", 100, 120);
+
+    context.fillStyle = "#ecfeff";
+    context.font = "800 84px Arial";
+    context.fillText("트릴 그룹 요약", 100, 230);
+
+    context.fillStyle = "#9fb4bb";
+    context.font = "600 32px Arial";
+    context.fillText("왼손 · 오른손 · 양손 기록을 한 세트로 묶어서 내보내요.", 102, 282);
+
+    groups.forEach((groupData, index) => {
+      const top = 360 + index * 420;
+      drawGroupSummaryBlock(context, {
+        x: 100,
+        y: top,
+        width: 1400,
+        title: getTrillGroupLabel(groupData.group),
+        summary: groupData.summary,
+        latestEntry: groupData.entries[0] ?? null,
+      });
+    });
+
+    context.fillStyle = "#9fb4bb";
+    context.font = "600 28px Arial";
+    context.fillText("각 그룹의 최근 기록과 핵심 지표를 한 장으로 공유할 수 있어요.", 100, 1720);
+
+    downloadCanvas(canvas, "trill-lab-stats-trill-groups.png");
+    setShareStatus("트릴 3개 그룹 요약 이미지를 다운로드했어요.");
   }
 
   return (
@@ -263,7 +308,7 @@ function StatsPageContent() {
       <section className="page-section compact-summary panel">
         <strong>카테고리별 통계</strong>
         <span className="compact-summary-divider">·</span>
-        <span>`트릴` · `드르륵` · `연타`만 확인할 수 있어요.</span>
+        <span>트릴 · 드르륵 · 연타 중 원하는 패턴을 고르고 기록을 확인해요.</span>
       </section>
 
       <section className="page-section pattern-select-grid" aria-label="통계 필터 선택">
@@ -272,8 +317,8 @@ function StatsPageContent() {
           return (
             <Link key={filter.href} href={filter.href} className={`pattern-select-card panel ${isActive ? "is-active" : ""}`}>
               <strong>{filter.label}</strong>
-              <p>{filter.href.replace("/stats", "/stats")}</p>
-              <span>필터 적용</span>
+              <p>{filter.description}</p>
+              <span>{isActive ? "선택됨" : "통계 보기"}</span>
             </Link>
           );
         })}
@@ -284,10 +329,10 @@ function StatsPageContent() {
           <article className="panel simple-panel">
             <p className="section-label">카테고리를 선택하세요</p>
             <h2 className="section-title">전체 통계는 숨겼어요</h2>
-            <p className="section-subtitle">위에서 `트릴`, `드르륵`, `연타` 중 하나를 선택해 주세요.</p>
+            <p className="section-subtitle">위에서 트릴, 드르륵, 연타 중 하나를 선택해 주세요.</p>
           </article>
         </section>
-      ) : filteredHistory.length === 0 ? (
+      ) : patternHistory.length === 0 ? (
         <section className="page-section">
           <article className="panel simple-panel">
             <p className="section-label">아직 데이터가 없어요</p>
@@ -297,91 +342,161 @@ function StatsPageContent() {
         </section>
       ) : (
         <>
-          <section className="stats-overview-grid page-section">
-            {getOverviewCards(summary, activePattern).map((card) => (
-              <StatCard key={card.label} label={card.label} value={card.value} />
-            ))}
-          </section>
-
-          <section className="stats-layout page-section">
-            <article className="panel stack-gap-lg">
-              <div>
-                <p className="section-label">최근 기록</p>
-                <h2 className="section-title">확인할 기록을 선택하세요</h2>
+          {activePattern === "trill" ? (
+            <section className="page-section trill-group-section">
+              <div className="section-heading-row">
+                <div>
+                  <p className="section-label">트릴 그룹 요약</p>
+                  <h2 className="section-title">손 조합별로 기록을 나눠서 보세요</h2>
+                </div>
+                <p className="section-subtitle">상단 그룹을 누르면 아래 기록 목록과 상세 카드가 바로 필터링돼요.</p>
               </div>
-              <div className="history-list">
-                {filteredHistory.map((entry) => {
-                  const isActive = selectedRun?.id === entry.id;
+              <div className="trill-group-grid">
+                {groupSummaries.map((groupData) => {
+                  const isActive = groupData.group === selectedTrillGroup;
                   return (
-                    <button key={entry.id} type="button" className={`history-card ${isActive ? "is-active" : ""}`} onClick={() => setSelectedId(entry.id)}>
-                      <div>
-                        <strong>{getShareHeadline(entry)}</strong>
-                        <span>{getPatternLabel(entry.pattern)} · {getVariantLabel(entry.variant, entry.pattern)} · {entry.keys.join(" / ")}</span>
+                    <button
+                      key={groupData.group}
+                      type="button"
+                      className={`trill-group-card ${isActive ? "is-active" : ""}`}
+                      onClick={() => {
+                        setSelectedTrillGroup(groupData.group);
+                        setSelectedId(groupData.entries[0]?.id ?? null);
+                      }}
+                    >
+                      <div className="trill-group-card-header">
+                        <strong>{getTrillGroupLabel(groupData.group)}</strong>
+                        <span>{groupData.summary.totalRuns}회</span>
                       </div>
-                      <div className="history-meta">
-                        <span>{getShareMeta(entry)}</span>
-                        <span>{formatDateTime(entry.createdAt)}</span>
+                      <div className="trill-group-card-metrics">
+                        <StatCard label="최고 BPM" value={String(groupData.summary.bestBpm || 0)} compact />
+                        <StatCard label="평균 BPM" value={String(groupData.summary.averageBpm || 0)} compact />
+                        <StatCard label="평균 정확도" value={`${groupData.summary.averageAccuracy}%`} compact />
+                        <StatCard label="최고 일정함" value={`${groupData.summary.bestConsistency}%`} compact />
                       </div>
                     </button>
                   );
                 })}
               </div>
-            </article>
+            </section>
+          ) : (
+            <section className="stats-overview-grid page-section">
+              {getOverviewCards(summary, activePattern).map((card) => (
+                <StatCard key={card.label} label={card.label} value={card.value} />
+              ))}
+            </section>
+          )}
 
-            {selectedRun ? (
+          {activePattern === "trill" && filteredHistory.length > 0 ? (
+            <section className="page-section stats-overview-grid stats-overview-grid-compact">
+              {getOverviewCards(summary, activePattern).map((card) => (
+                <StatCard key={card.label} label={card.label} value={card.value} compact />
+              ))}
+            </section>
+          ) : null}
+
+          {filteredHistory.length === 0 ? (
+            <section className="page-section">
+              <article className="panel simple-panel">
+                <p className="section-label">선택한 그룹의 데이터가 없어요</p>
+                <h2 className="section-title">다른 그룹을 눌러 보거나 측정을 더 진행해 주세요</h2>
+                <p className="section-subtitle">트릴은 왼손, 오른손, 양손을 각각 따로 저장해요.</p>
+              </article>
+            </section>
+          ) : (
+            <section className="stats-layout page-section">
               <article className="panel stack-gap-lg">
-                <div className="share-card-preview">
-                  <div className="share-card-preview-header">
-                    <span className="brand-mark">TRILL LAB</span>
-                    <span>{formatDateTime(selectedRun.createdAt)}</span>
-                  </div>
+                <div className="section-heading-row">
                   <div>
-                    <p className="section-label">선택한 기록</p>
-                    <h2 className="share-bpm">{getShareHeadline(selectedRun)}</h2>
-                    <p className="section-subtitle">{getPatternLabel(selectedRun.pattern)} · {getVariantLabel(selectedRun.variant, selectedRun.pattern)} · {selectedRun.keys.join(" / ")}</p>
+                    <p className="section-label">기록 목록</p>
+                    <h2 className="section-title">{activePattern === "trill" ? `${getTrillGroupLabel(selectedTrillGroup)} 기록` : "확인할 기록을 선택하세요"}</h2>
                   </div>
-                  <div className="share-card-metrics">
-                    {getRunMetricCards(selectedRun).slice(0, 4).map((metric) => (
+                  <p className="section-subtitle">아래 목록은 현재 선택한 {activePattern === "trill" ? "그룹" : "패턴 필터"}만 보여줘요.</p>
+                </div>
+                <div className="history-list history-list-scroll">
+                  {filteredHistory.map((entry) => {
+                    const isActive = selectedRun?.id === entry.id;
+                    return (
+                      <button key={entry.id} type="button" className={`history-card ${isActive ? "is-active" : ""}`} onClick={() => setSelectedId(entry.id)}>
+                        <div>
+                          <strong>{getShareHeadline(entry)}</strong>
+                          <span>{getPatternLabel(entry.pattern)} · {getVariantLabel(entry.variant, entry.pattern)} · {entry.keys.join(" / ")}</span>
+                        </div>
+                        <div className="history-meta">
+                          <span>{getShareMeta(entry)}</span>
+                          <span>{formatDateTime(entry.createdAt)}</span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </article>
+
+              {selectedRun ? (
+                <article className="panel stack-gap-lg">
+                  <div className="share-card-preview">
+                    <div className="share-card-preview-header">
+                      <span className="brand-mark">TRILL LAB</span>
+                      <span>{formatDateTime(selectedRun.createdAt)}</span>
+                    </div>
+                    <div>
+                      <p className="section-label">선택한 기록</p>
+                      <h2 className="share-bpm">{getShareHeadline(selectedRun)}</h2>
+                      <p className="section-subtitle">{getPatternLabel(selectedRun.pattern)} · {getVariantLabel(selectedRun.variant, selectedRun.pattern)} · {selectedRun.keys.join(" / ")}</p>
+                    </div>
+                    <div className="share-card-metrics">
+                      {getRunMetricCards(selectedRun).slice(0, 4).map((metric) => (
+                        <StatCard key={metric.label} label={metric.label} value={metric.value} compact />
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="interval-stats-grid">
+                    {getRunMetricCards(selectedRun).slice(4).map((metric) => (
                       <StatCard key={metric.label} label={metric.label} value={metric.value} compact />
                     ))}
                   </div>
-                </div>
 
-                <div className="interval-stats-grid">
-                  {getRunMetricCards(selectedRun).slice(4).map((metric) => (
-                    <StatCard key={metric.label} label={metric.label} value={metric.value} compact />
-                  ))}
-                </div>
+                  <div className="share-card-preview">
+                    <div className="share-card-preview-header">
+                      <span className="brand-mark">TRILL LAB</span>
+                      <span>{activePattern === "trill" ? "3개 그룹 세트 내보내기" : "현재 필터 통계 공유"}</span>
+                    </div>
+                    <div>
+                      <p className="section-label">필터 기반 요약</p>
+                      <h2 className="section-title">{activePattern === "trill" ? "트릴 3개 그룹 요약 이미지" : "현재 필터 통계 이미지"}</h2>
+                      <p className="section-subtitle">
+                        {activePattern === "trill"
+                          ? "왼손, 오른손, 양손 요약을 한 장으로 묶어서 내려받아요. 단일 기록 이미지와는 별도로 관리돼요."
+                          : "현재 페이지 필터 그대로 이미지가 만들어져요. 드르륵은 1234/4321 각각 따로 뽑을 수 있어요."}
+                      </p>
+                    </div>
+                    <div className="share-card-metrics">
+                      {(activePattern === "trill"
+                        ? groupSummaries.map((groupData) => ({
+                            label: `${getTrillGroupLabel(groupData.group)} 평균 BPM`,
+                            value: String(groupData.summary.averageBpm || 0),
+                          }))
+                        : getOverviewCards(summary, activePattern)
+                      ).slice(0, 4).map((card) => (
+                        <StatCard key={card.label} label={card.label} value={card.value} compact />
+                      ))}
+                    </div>
+                  </div>
 
-                <div className="share-card-preview">
-                  <div className="share-card-preview-header">
-                    <span className="brand-mark">TRILL LAB</span>
-                    <span>현재 필터 통계 공유</span>
+                  <div className="share-actions share-actions-row">
+                    <button type="button" className="primary-button" onClick={() => downloadRunShareCard(selectedRun)}>
+                      선택한 기록 이미지 다운로드
+                    </button>
+                    <button type="button" className="secondary-button" onClick={downloadOverallShareCard}>
+                      {activePattern === "trill" ? "트릴 3개 그룹 요약 다운로드" : "현재 필터 통계 이미지 다운로드"}
+                    </button>
                   </div>
-                  <div>
-                    <p className="section-label">필터 기반 요약</p>
-                    <h2 className="section-title">쿼리스트링으로 분리된 통계 이미지</h2>
-                    <p className="section-subtitle">현재 페이지 필터 그대로 이미지가 만들어져요. 드르륵은 1234/4321 각각 따로 뽑을 수 있어요.</p>
-                  </div>
-                  <div className="share-card-metrics">
-                    {getOverviewCards(summary, activePattern).slice(0, 4).map((card) => (
-                      <StatCard key={card.label} label={card.label} value={card.value} compact />
-                    ))}
-                  </div>
-                </div>
-
-                <div className="share-actions">
-                  <button type="button" className="primary-button" onClick={() => downloadRunShareCard(selectedRun)}>
-                    선택한 기록 이미지 다운로드
-                  </button>
-                  <button type="button" className="secondary-button" onClick={downloadOverallShareCard}>
-                    현재 필터 통계 이미지 다운로드
-                  </button>
                   {shareStatus ? <span className="hint-text">{shareStatus}</span> : null}
-                </div>
-              </article>
-            ) : null}
-          </section>
+                </article>
+              ) : null}
+            </section>
+          )}
         </>
       )}
     </main>
@@ -413,7 +528,54 @@ function standardDeviation(values: number[]) {
   return Math.sqrt(variance);
 }
 
+function buildStatsSummary(entries: MeasureHistoryEntry[]): StatsSummary {
+  if (entries.length === 0) {
+    return {
+      totalRuns: 0,
+      bestBpm: 0,
+      averageBpm: 0,
+      bestConsistency: 0,
+      averageAccuracy: 0,
+      completedDrurukRuns: 0,
+      averageDrurukDurationMs: null,
+      drurukDurationStdDevMs: null,
+      averageDrurukStepIntervalMs: null,
+      drurukStepIntervalStdDevMs: null,
+      averageYeontaTransitionMs: null,
+      yeontaTransitionStdDevMs: null,
+    };
+  }
+
+  const totalRuns = entries.length;
+  const bestBpm = Math.max(...entries.map((entry) => entry.result.bpm));
+  const averageBpm = Math.round(entries.reduce((sum, entry) => sum + entry.result.bpm, 0) / totalRuns);
+  const bestConsistency = Math.max(...entries.map((entry) => entry.result.consistencyScore));
+  const averageAccuracy = Math.round(entries.reduce((sum, entry) => sum + entry.result.accuracy, 0) / totalRuns);
+
+  const drurukEntries = entries.filter((entry) => entry.pattern === "druruk" && entry.result.druruk);
+  const runDurations = drurukEntries.flatMap((entry) => entry.result.druruk?.runDurations ?? []);
+  const stepIntervals = drurukEntries.flatMap((entry) => entry.result.druruk?.stepIntervals ?? []);
+  const completedDrurukRuns = drurukEntries.reduce((sum, entry) => sum + (entry.result.druruk?.completedRuns ?? 0), 0);
+  const yeontaTransitionIntervals = entries.flatMap((entry) => entry.result.yeonta?.transitionIntervals ?? []);
+
+  return {
+    totalRuns,
+    bestBpm,
+    averageBpm,
+    bestConsistency,
+    averageAccuracy,
+    completedDrurukRuns,
+    averageDrurukDurationMs: average(runDurations),
+    drurukDurationStdDevMs: standardDeviation(runDurations),
+    averageDrurukStepIntervalMs: average(stepIntervals),
+    drurukStepIntervalStdDevMs: standardDeviation(stepIntervals),
+    averageYeontaTransitionMs: average(yeontaTransitionIntervals),
+    yeontaTransitionStdDevMs: standardDeviation(yeontaTransitionIntervals),
+  };
+}
+
 function getFilterTitle(pattern: PatternKey | null, variant: MeasureVariant | null) {
+  if (pattern === "trill" && variant && isTrillGroupVariant(variant)) return `트릴 ${getTrillGroupLabel(variant)} 통계`;
   if (pattern === "druruk" && variant) return `드르륵 ${getVariantLabel(variant, pattern)} 통계`;
   if (pattern) return `${getPatternDefinition(pattern).label} 통계`;
   return "카테고리별 통계";
@@ -422,7 +584,7 @@ function getFilterTitle(pattern: PatternKey | null, variant: MeasureVariant | nu
 function buildActiveFilterHref(pattern: PatternKey | null, variant: MeasureVariant | null) {
   const params = new URLSearchParams();
   if (pattern) params.set("pattern", pattern);
-  if (variant) params.set("variant", variant);
+  if (pattern && pattern !== "trill" && variant) params.set("variant", variant);
   const query = params.toString();
   return query ? `/stats?${query}` : "/stats";
 }
@@ -447,7 +609,7 @@ function getShareMeta(entry: MeasureHistoryEntry) {
   return `정확도 ${formatPercent(entry.result.accuracy)} · 일정함 ${entry.result.consistencyScore}%`;
 }
 
-function getRunMetricCards(entry: MeasureHistoryEntry) {
+function getRunMetricCards(entry: MeasureHistoryEntry): StatMetric[] {
   if (entry.pattern === "druruk") {
     return [
       { label: "완성 드르륵", value: String(entry.result.druruk?.completedRuns ?? 0) },
@@ -486,7 +648,7 @@ function getRunMetricCards(entry: MeasureHistoryEntry) {
   ];
 }
 
-function getOverviewCards(summary: StatsSummary, activePattern: PatternKey | null) {
+function getOverviewCards(summary: StatsSummary, activePattern: PatternKey | null): StatMetric[] {
   if (activePattern === "druruk") {
     return [
       { label: "총 측정 수", value: String(summary.totalRuns) },
@@ -515,41 +677,14 @@ function getOverviewCards(summary: StatsSummary, activePattern: PatternKey | nul
     { label: "총 측정 수", value: String(summary.totalRuns) },
     { label: "최고 BPM", value: String(summary.bestBpm) },
     { label: "평균 BPM", value: String(summary.averageBpm) },
+    { label: "평균 정확도", value: `${summary.averageAccuracy}%` },
     { label: "최고 일정함", value: `${summary.bestConsistency}%` },
+    { label: "평균 간격", value: formatMs(summary.averageBpm ? 60000 / Math.max(summary.averageBpm * 2, 1) : null) },
   ];
 }
 
 function getSummaryMetricCards(summary: StatsSummary, activePattern: PatternKey | null) {
-  if (activePattern === "druruk") {
-    return [
-      { label: "총 측정 수", value: String(summary.totalRuns) },
-      { label: "완성 드르륵", value: String(summary.completedDrurukRuns) },
-      { label: "평균 드르륵", value: formatMs(summary.averageDrurukDurationMs) },
-      { label: "드르륵 표준편차", value: formatMs(summary.drurukDurationStdDevMs) },
-      { label: "평균 단계 간격", value: formatMs(summary.averageDrurukStepIntervalMs) },
-      { label: "단계 간격 편차", value: formatMs(summary.drurukStepIntervalStdDevMs) },
-      { label: "평균 정확도", value: `${summary.averageAccuracy}%` },
-      { label: "최고 일정함", value: `${summary.bestConsistency}%` },
-    ];
-  }
-
-  if (activePattern === "yeonta") {
-    return [
-      { label: "총 측정 수", value: String(summary.totalRuns) },
-      { label: "최고 BPM", value: String(summary.bestBpm) },
-      { label: "평균 BPM", value: String(summary.averageBpm) },
-      { label: "평균 전환 딜레이", value: formatMs(summary.averageYeontaTransitionMs) },
-      { label: "전환 편차", value: formatMs(summary.yeontaTransitionStdDevMs) },
-      { label: "최고 일정함", value: `${summary.bestConsistency}%` },
-    ];
-  }
-
-  return [
-    { label: "총 측정 수", value: String(summary.totalRuns) },
-    { label: "최고 BPM", value: String(summary.bestBpm) },
-    { label: "평균 BPM", value: String(summary.averageBpm) },
-    { label: "최고 일정함", value: `${summary.bestConsistency}%` },
-  ];
+  return getOverviewCards(summary, activePattern);
 }
 
 function getRunShareFilename(entry: MeasureHistoryEntry) {
@@ -651,6 +786,49 @@ function drawSummaryRow(
 
   const rightTextWidth = context.measureText(params.metaRight).width;
   context.fillText(params.metaRight, params.x + params.width - rightTextWidth - 28, params.y + 112);
+}
+
+function drawGroupSummaryBlock(
+  context: CanvasRenderingContext2D,
+  params: { x: number; y: number; width: number; title: string; summary: StatsSummary; latestEntry: MeasureHistoryEntry | null },
+) {
+  context.fillStyle = "rgba(255, 255, 255, 0.04)";
+  roundRect(context, params.x, params.y, params.width, 320, 28);
+  context.fill();
+  context.strokeStyle = "rgba(100, 245, 231, 0.16)";
+  context.stroke();
+
+  context.fillStyle = "#ecfeff";
+  context.font = "800 52px Arial";
+  context.fillText(params.title, params.x + 36, params.y + 74);
+
+  context.fillStyle = "#9fb4bb";
+  context.font = "600 28px Arial";
+  context.fillText(`${params.summary.totalRuns}회 측정 · 평균 정확도 ${params.summary.averageAccuracy}% · 최고 일정함 ${params.summary.bestConsistency}%`, params.x + 36, params.y + 120);
+
+  const metrics: StatMetric[] = [
+    { label: "최고 BPM", value: String(params.summary.bestBpm) },
+    { label: "평균 BPM", value: String(params.summary.averageBpm) },
+    { label: "평균 정확도", value: `${params.summary.averageAccuracy}%` },
+    { label: "최고 일정함", value: `${params.summary.bestConsistency}%` },
+  ];
+
+  metrics.forEach((metric, index) => {
+    drawMetric(context, {
+      x: params.x + 36 + index * 330,
+      y: params.y + 154,
+      w: 292,
+      h: 126,
+      label: metric.label,
+      value: metric.value,
+    });
+  });
+
+  if (params.latestEntry) {
+    context.fillStyle = "#9fb4bb";
+    context.font = "600 24px Arial";
+    context.fillText(`최근 기록 ${getShareHeadline(params.latestEntry)} · ${formatDateTime(params.latestEntry.createdAt)}`, params.x + 36, params.y + 304);
+  }
 }
 
 function drawIntervals(

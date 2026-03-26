@@ -1,6 +1,7 @@
 import type { PatternKey } from "./patterns";
 
 export type MeasureVariant = "left" | "right" | "both" | "1234" | "4321";
+export type TrillGroupVariant = Extract<MeasureVariant, "left" | "right" | "both">;
 
 export type DrurukStats = {
   completedRuns: number;
@@ -45,6 +46,7 @@ export type MeasureHistoryEntry = {
 };
 
 export const MEASURE_HISTORY_STORAGE_KEY = "trill-lab.measure-history.v2";
+export const TRILL_GROUP_VARIANTS: TrillGroupVariant[] = ["left", "right", "both"];
 
 export function readMeasureHistory(): MeasureHistoryEntry[] {
   if (typeof window === "undefined") return [];
@@ -103,7 +105,7 @@ export function formatDecimal(value: number | null, digits = 1) {
 }
 
 export function formatDateTime(value: string) {
-  return new Intl.DateTimeFormat("en-US", {
+  return new Intl.DateTimeFormat("ko-KR", {
     month: "short",
     day: "numeric",
     hour: "numeric",
@@ -121,6 +123,16 @@ export function getVariantLabel(variant: MeasureVariant, pattern?: PatternKey) {
   if (variant === "left") return "왼손 모드";
   if (variant === "right") return "오른손 모드";
   return "양손 모드";
+}
+
+export function getTrillGroupLabel(variant: TrillGroupVariant) {
+  if (variant === "left") return "왼손";
+  if (variant === "right") return "오른손";
+  return "양손";
+}
+
+export function isTrillGroupVariant(value: string | null | undefined): value is TrillGroupVariant {
+  return value === "left" || value === "right" || value === "both";
 }
 
 export function getPatternLabel(pattern: PatternKey) {

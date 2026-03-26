@@ -65,6 +65,33 @@ async function setElapsedMs(page: Page, nextElapsedMs: number) {
   }, nextElapsedMs);
 }
 
+async function expectFeedbackWithinLaneNearJudgmentLine(page: Page, laneIndex: number) {
+  const lane = page.locator(".practice-lane").nth(laneIndex);
+  const feedback = lane.locator(".practice-lane-feedback");
+  const judgmentLine = page.locator(".practice-judgment-line");
+
+  const [laneBox, feedbackBox, lineBox] = await Promise.all([
+    lane.boundingBox(),
+    feedback.boundingBox(),
+    judgmentLine.boundingBox(),
+  ]);
+
+  expect(laneBox).not.toBeNull();
+  expect(feedbackBox).not.toBeNull();
+  expect(lineBox).not.toBeNull();
+
+  if (!laneBox || !feedbackBox || !lineBox) {
+    throw new Error("Expected lane, feedback, and judgment line bounding boxes to exist.");
+  }
+
+  expect(feedbackBox.x).toBeGreaterThanOrEqual(laneBox.x);
+  expect(feedbackBox.x + feedbackBox.width).toBeLessThanOrEqual(laneBox.x + laneBox.width);
+  expect(feedbackBox.y).toBeGreaterThanOrEqual(laneBox.y);
+  expect(feedbackBox.y + feedbackBox.height).toBeLessThanOrEqual(laneBox.y + laneBox.height);
+  expect(feedbackBox.y + feedbackBox.height).toBeLessThanOrEqual(lineBox.y + 2);
+  expect(feedbackBox.y + feedbackBox.height).toBeGreaterThanOrEqual(lineBox.y - 32);
+}
+
 test.describe("/practice", () => {
   test("기본 설정 UI를 렌더하고 비트 변경이 배지에 반영된다", async ({ page }) => {
     await page.goto("/practice");
@@ -176,6 +203,7 @@ test.describe("/practice", () => {
     await expect(laneFeedback.locator("strong")).toHaveText("PERFECT");
     await expect(laneFeedback.locator("span")).toHaveText("-18ms");
     await expect(laneFeedback.locator("small")).toHaveText("FAST");
+    await expectFeedbackWithinLaneNearJudgmentLine(page, 1);
   });
 
   test("레인별 판정 피드백이 올바르게 렌더된다 - GOOD with SLOW timing", async ({ page }) => {
@@ -196,6 +224,7 @@ test.describe("/practice", () => {
     await expect(laneFeedback.locator("strong")).toHaveText("GOOD");
     await expect(laneFeedback.locator("span")).toHaveText("+45ms");
     await expect(laneFeedback.locator("small")).toHaveText("SLOW");
+    await expectFeedbackWithinLaneNearJudgmentLine(page, 2);
   });
 
   test("여러 레인에 동시에 판정 피드백이 표시된다", async ({ page }) => {

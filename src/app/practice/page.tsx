@@ -98,6 +98,7 @@ const JUDGMENT_LINE_Y = 430;
 const HIT_EFFECT_DURATION_MS = 260;
 const LANE_PRESS_EFFECT_DURATION_MS = 120;
 const LANE_FEEDBACK_DURATION_MS = 720;
+const LANE_FEEDBACK_GAP_PX = 12;
 const MIN_TRAVEL_MS = 260;
 const MAX_TRAVEL_MS = 1050;
 
@@ -859,19 +860,21 @@ export default function PracticePage() {
 
                     {lanePressEffects.some((effect) => effect.lane === lane) && <div className="practice-lane-press-effect" />}
 
-                    {laneJudgmentFeedbacks
-                      .filter((feedback) => feedback.lane === lane)
-                      .map((feedback) => (
-                        <div
-                          key={feedback.id}
-                          className={`practice-lane-feedback is-${feedback.judgment}`}
-                          aria-live="off"
-                        >
-                          <strong>{feedback.judgment.toUpperCase()}</strong>
-                          <span>{feedback.signedMs}</span>
-                          <small>{feedback.timingLabel}</small>
-                        </div>
-                      ))}
+                    <div className="practice-lane-feedback-anchor" style={{ top: `${JUDGMENT_LINE_Y}px` }} aria-hidden="true">
+                      {laneJudgmentFeedbacks
+                        .filter((feedback) => feedback.lane === lane)
+                        .map((feedback) => (
+                          <div
+                            key={feedback.id}
+                            className={`practice-lane-feedback is-${feedback.judgment}`}
+                            aria-live="off"
+                          >
+                            <strong>{feedback.judgment.toUpperCase()}</strong>
+                            <span>{feedback.signedMs}</span>
+                            <small>{feedback.timingLabel}</small>
+                          </div>
+                        ))}
+                    </div>
 
                     {laneNotes.map((note) => {
                       const y =
@@ -1165,11 +1168,19 @@ export default function PracticePage() {
           z-index: 2;
         }
 
-        .practice-lane-feedback {
+        .practice-lane-feedback-anchor {
           position: absolute;
           left: 10px;
           right: 10px;
-          top: ${JUDGMENT_LINE_Y - 62}px;
+          pointer-events: none;
+          z-index: 5;
+        }
+
+        .practice-lane-feedback {
+          position: absolute;
+          left: 0;
+          right: 0;
+          bottom: ${LANE_FEEDBACK_GAP_PX}px;
           display: grid;
           gap: 3px;
           justify-items: center;

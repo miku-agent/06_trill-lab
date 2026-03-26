@@ -398,17 +398,18 @@ function MeasurePageContent() {
   ]);
 
   useEffect(() => {
+    if (sessionState !== "idle") return;
+
     const nextKeys = getDefaultKeys(pattern, measureVariant, activePreset);
 
     const timer = window.setTimeout(() => {
       setKeys(nextKeys);
       setKeyCaptureTarget(null);
-      setSessionState("idle");
       resetStats();
     }, 0);
 
     return () => window.clearTimeout(timer);
-  }, [activePreset, measureVariant, pattern, resetStats]);
+  }, [activePreset, measureVariant, pattern, resetStats, sessionState]);
 
   useEffect(() => {
     if (sessionState !== "countdown") return;
@@ -652,12 +653,14 @@ function MeasurePageContent() {
                 <div className="preset-grid">
                   {(pattern === "trill"
                     ? MEASURE_PRESETS
-                    : getDrurukVariantsByKeyCount(drurukKeyCount).map((variant) => ({
-                        key: variant,
-                        title: getDrurukProfile(variant).title,
-                        description: getDrurukProfile(variant).description,
-                        defaultKeys: getDrurukProfile(variant).defaultKeys,
-                      }))).map((preset) => {
+                    : pattern === "druruk"
+                      ? getDrurukVariantsByKeyCount(drurukKeyCount).map((variant) => ({
+                          key: variant,
+                          title: getDrurukProfile(variant).title,
+                          description: getDrurukProfile(variant).description,
+                          defaultKeys: getDrurukProfile(variant).defaultKeys,
+                        }))
+                      : []).map((preset) => {
                     const isActive = preset.key === measureVariant;
                     return (
                       <button

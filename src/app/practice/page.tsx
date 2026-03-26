@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 
 type GameState = "idle" | "playing" | "ended";
 type EndMode = "firstMiss" | "timed";
@@ -98,6 +98,7 @@ const JUDGMENT_LINE_Y = 430;
 const HIT_EFFECT_DURATION_MS = 260;
 const LANE_PRESS_EFFECT_DURATION_MS = 120;
 const LANE_FEEDBACK_DURATION_MS = 720;
+const LANE_FEEDBACK_GAP_PX = 12;
 const MIN_TRAVEL_MS = 260;
 const MAX_TRAVEL_MS = 1050;
 
@@ -859,6 +860,22 @@ export default function PracticePage() {
 
                     {lanePressEffects.some((effect) => effect.lane === lane) && <div className="practice-lane-press-effect" />}
 
+                    <div className="practice-lane-feedback-anchor" style={{ top: `${JUDGMENT_LINE_Y}px` }} aria-hidden="true">
+                      {laneJudgmentFeedbacks
+                        .filter((feedback) => feedback.lane === lane)
+                        .map((feedback) => (
+                          <div
+                            key={feedback.id}
+                            className={`practice-lane-feedback is-${feedback.judgment}`}
+                            aria-live="off"
+                          >
+                            <strong>{feedback.judgment.toUpperCase()}</strong>
+                            <span>{feedback.signedMs}</span>
+                            <small>{feedback.timingLabel}</small>
+                          </div>
+                        ))}
+                    </div>
+
                     {laneNotes.map((note) => {
                       const y =
                         getTimelineCenterY(note.time, elapsedMs, travelMs) - NOTE_HEIGHT_PX / 2;
@@ -893,21 +910,6 @@ export default function PracticePage() {
                   </div>
                 );
               })}
-
-              {laneJudgmentFeedbacks.map((feedback) => (
-                <div
-                  key={feedback.id}
-                  className={`practice-lane-feedback is-${feedback.judgment}`}
-                  data-lane={feedback.lane}
-                  aria-label={`Lane ${feedback.lane + 1} ${feedback.judgment} ${feedback.timingLabel} ${feedback.signedMs}`}
-                  aria-live="off"
-                  style={{ ["--lane-index" as string]: feedback.lane } as CSSProperties}
-                >
-                  <strong>{feedback.judgment.toUpperCase()}</strong>
-                  <span>{feedback.signedMs}</span>
-                  <small>{feedback.timingLabel}</small>
-                </div>
-              ))}
 
               <div className="practice-judgment-line" style={{ top: `${JUDGMENT_LINE_Y}px` }} />
             </div>
@@ -1112,18 +1114,15 @@ export default function PracticePage() {
         }
 
         .practice-rail {
-          --practice-rail-padding: 14px;
-          --practice-rail-gap: 8px;
-          --practice-lane-width: calc((100% - (var(--practice-rail-padding) * 2) - (var(--practice-rail-gap) * 3)) / 4);
           position: relative;
           display: grid;
           grid-template-columns: repeat(4, minmax(0, 1fr));
-          gap: var(--practice-rail-gap);
+          gap: 8px;
           overflow: hidden;
           border-radius: 22px;
           background: linear-gradient(180deg, rgba(7, 19, 26, 0.9), rgba(7, 19, 26, 0.68));
           border: 1px solid rgba(100, 245, 231, 0.16);
-          padding: var(--practice-rail-padding);
+          padding: 14px;
         }
 
         .practice-lane {
@@ -1169,60 +1168,48 @@ export default function PracticePage() {
           z-index: 2;
         }
 
-        .practice-lane-feedback {
+        .practice-lane-feedback-anchor {
           position: absolute;
-          left: calc(
-            var(--practice-rail-padding) +
-            (var(--lane-index) * (var(--practice-lane-width) + var(--practice-rail-gap))) +
-            (var(--practice-lane-width) / 2)
-          );
-          top: ${JUDGMENT_LINE_Y - 18}px;
-          width: min(calc(var(--practice-lane-width) - 14px), 140px);
-          display: grid;
-          gap: 4px;
-          justify-items: center;
-          text-align: center;
-          padding: 10px 10px 12px;
-          border-radius: 14px;
-          border: 1px solid rgba(100, 245, 231, 0.42);
-          background: linear-gradient(180deg, rgba(4, 15, 22, 0.96), rgba(7, 19, 26, 0.84));
-          backdrop-filter: blur(6px);
+          left: 10px;
+          right: 10px;
           pointer-events: none;
-          z-index: 6;
-          transform: translate(-50%, -50%);
-          animation: lane-feedback-pop ${LANE_FEEDBACK_DURATION_MS}ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+          z-index: 5;
         }
 
-        .practice-lane-feedback::after {
-          content: "";
+        .practice-lane-feedback {
           position: absolute;
-          left: 50%;
-          top: calc(100% - 2px);
-          width: 2px;
-          height: 28px;
-          border-radius: 999px;
-          background: linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(100, 245, 231, 0));
-          opacity: 0.7;
-          transform: translateX(-50%);
+          left: 0;
+          right: 0;
+          bottom: ${LANE_FEEDBACK_GAP_PX}px;
+          display: grid;
+          gap: 3px;
+          justify-items: center;
+          text-align: center;
+          padding: 8px 6px;
+          border-radius: 12px;
+          border: 1px solid rgba(100, 245, 231, 0.38);
+          background: rgba(5, 16, 22, 0.84);
+          pointer-events: none;
+          z-index: 5;
+          animation: lane-feedback-rise ${LANE_FEEDBACK_DURATION_MS}ms ease-out forwards;
         }
 
         .practice-lane-feedback strong {
-          font-size: 14px;
+          font-size: 13px;
           line-height: 1;
-          letter-spacing: 0.08em;
+          letter-spacing: 0.05em;
         }
 
         .practice-lane-feedback span {
-          font-size: 20px;
-          font-weight: 900;
+          font-size: 16px;
+          font-weight: 800;
           line-height: 1;
-          font-variant-numeric: tabular-nums;
         }
 
         .practice-lane-feedback small {
           font-size: 10px;
-          font-weight: 800;
-          letter-spacing: 0.14em;
+          font-weight: 700;
+          letter-spacing: 0.08em;
         }
 
         .practice-lane-feedback.is-perfect {
@@ -1322,22 +1309,18 @@ export default function PracticePage() {
           }
         }
 
-        @keyframes lane-feedback-pop {
+        @keyframes lane-feedback-rise {
           0% {
             opacity: 0;
-            transform: translate(-50%, calc(-50% + 16px)) scale(0.82);
+            transform: translateY(10px) scale(0.98);
           }
-          18% {
+          20% {
             opacity: 1;
-            transform: translate(-50%, calc(-50% - 2px)) scale(1.04);
-          }
-          68% {
-            opacity: 1;
-            transform: translate(-50%, calc(-50% - 10px)) scale(1);
+            transform: translateY(0) scale(1);
           }
           100% {
             opacity: 0;
-            transform: translate(-50%, calc(-50% - 22px)) scale(0.96);
+            transform: translateY(-14px) scale(1.02);
           }
         }
 
@@ -1353,8 +1336,8 @@ export default function PracticePage() {
 
         .practice-beat-line {
           position: absolute;
-          left: var(--practice-rail-padding);
-          right: var(--practice-rail-padding);
+          left: 14px;
+          right: 14px;
           height: 1px;
           transform: translateY(-50%);
           background: rgba(194, 203, 214, 0.18);
@@ -1370,8 +1353,8 @@ export default function PracticePage() {
 
         .practice-judgment-line {
           position: absolute;
-          left: var(--practice-rail-padding);
-          right: var(--practice-rail-padding);
+          left: 14px;
+          right: 14px;
           height: 3px;
           transform: translateY(-50%);
           border-radius: 999px;
@@ -1517,21 +1500,8 @@ export default function PracticePage() {
           }
 
           .practice-rail {
-            --practice-rail-padding: 10px;
-            --practice-rail-gap: 6px;
-          }
-
-          .practice-lane-feedback {
-            width: min(calc(var(--practice-lane-width) - 10px), 112px);
-            padding: 9px 6px 11px;
-          }
-
-          .practice-lane-feedback strong {
-            font-size: 12px;
-          }
-
-          .practice-lane-feedback span {
-            font-size: 16px;
+            gap: 6px;
+            padding: 10px;
           }
         }
       `}</style>

@@ -1,6 +1,6 @@
 {
   "name": "trill-lab",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "packageManager": "pnpm@10.30.3",
   "scripts": {
@@ -8,7 +8,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:e2e": "playwright test",
+    "test:e2e:headed": "playwright test --headed"
   },
   "dependencies": {
     "next": "16.1.6",
@@ -16,6 +18,7 @@
     "react-dom": "19.2.3"
   },
   "devDependencies": {
+    "@playwright/test": "^1.54.2",
     "@types/node": "^24.6.1",
     "@types/react": "^19.2.2",
     "@types/react-dom": "^19.2.2",

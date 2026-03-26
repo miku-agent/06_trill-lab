@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 
 type GameState = "idle" | "playing" | "ended";
 type EndMode = "firstMiss" | "timed";
@@ -46,6 +46,13 @@ type LaneJudgmentFeedback = {
   judgment: Extract<JudgmentType, "perfect" | "good">;
   signedMs: string;
   timingLabel: "FAST" | "SLOW";
+};
+
+type PracticeTestApi = {
+  startControlledGame: (partialConfig?: Partial<GameConfig>) => void;
+  setElapsedMs: (nextElapsedMs: number) => void;
+  getPendingNotes: () => Array<Pick<Note, "id" | "lane" | "time">>;
+  focus: () => void;
 };
 
 type GameConfig = {
@@ -217,6 +224,7 @@ function getAccuracy(stats: GameStats) {
 }
 
 export default function PracticePage() {
+  const testMode = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("testMode") === "true";
   const [config, setConfig] = useState<GameConfig>(DEFAULT_CONFIG);
   const [gameState, setGameState] = useState<GameState>("idle");
   const [notes, setNotes] = useState<Note[]>([]);
@@ -242,6 +250,7 @@ export default function PracticePage() {
   const lastJudgmentTimeoutRef = useRef<number | null>(null);
   const hitEffectIdRef = useRef(0);
   const laneFeedbackIdRef = useRef(0);
+  const controlledElapsedMsRef = useRef<number | null>(null);
 
   const travelMs = useMemo(() => getTravelMs(config.speed), [config.speed]);
   const beatGuideLines = useMemo(() => createBeatGuideLines(config), [config]);
@@ -361,6 +370,38 @@ export default function PracticePage() {
     rootRef.current?.focus();
   }, []);
 
+  const handleRootMouseDown = useCallback(
+    (event: MouseEvent<HTMLElement>) => {
+      if (event.target instanceof HTMLElement && event.target.closest("button, input, select, textarea, a, label")) {
+        return;
+      }
+
+      focusPracticeRoot();
+    },
+    [focusPracticeRoot],
+  );
+
+  const getCurrentElapsedMs = useCallback(() => {
+    if (controlledElapsedMsRef.current !== null) {
+      return controlledElapsedMsRef.current;
+    }
+
+    return performance.now() - startAtRef.current;
+  }, []);
+
+  const syncElapsedForTest = useCallback((nextElapsedMs: number) => {
+    controlledElapsedMsRef.current = nextElapsedMs;
+    setElapsedMs(nextElapsedMs);
+
+    const staleMisses = notesRef.current.filter(
+      (note) => !note.judged && nextElapsedMs - note.time > MISS_WINDOW_MS,
+    );
+
+    staleMisses.forEach((note) => {
+      applyJudgment(note.id, "miss", note.lane);
+    });
+  }, [applyJudgment]);
+
   const startGame = useCallback(() => {
     const nextNotes = createNotes(config);
     notesRef.current = nextNotes;
@@ -379,6 +420,7 @@ export default function PracticePage() {
     setLanePressEffects([]);
     setLaneJudgmentFeedbacks([]);
     setGameState("playing");
+    controlledElapsedMsRef.current = null;
     startAtRef.current = performance.now();
     window.setTimeout(() => focusPracticeRoot(), 0);
   }, [config, focusPracticeRoot]);
@@ -400,11 +442,17 @@ export default function PracticePage() {
       miss: 0,
       totalNotes: 0,
     });
+    controlledElapsedMsRef.current = null;
     setGameState("idle");
   }, [stopLoop]);
 
   useEffect(() => {
     if (gameState !== "playing") {
+      stopLoop();
+      return;
+    }
+
+    if (controlledElapsedMsRef.current !== null) {
       stopLoop();
       return;
     }
@@ -484,7 +532,7 @@ export default function PracticePage() {
       event.preventDefault();
       triggerLanePressEffect(lane);
 
-      const currentTime = performance.now() - startAtRef.current;
+      const currentTime = getCurrentElapsedMs();
       const target = notesRef.current.find((note) => note.lane === lane && !note.judged);
 
       if (!target) {
@@ -526,7 +574,7 @@ export default function PracticePage() {
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [applyJudgment, config.leftKey, config.rightKey, config.endMode, finishGame, gameState, keyCaptureTarget, showFeedback, spawnLaneJudgmentFeedback, triggerLanePressEffect]);
+  }, [applyJudgment, config.leftKey, config.rightKey, config.endMode, finishGame, gameState, getCurrentElapsedMs, keyCaptureTarget, showFeedback, spawnLaneJudgmentFeedback, triggerLanePressEffect]);
 
   useEffect(() => {
     return () => {
@@ -536,6 +584,63 @@ export default function PracticePage() {
       }
     };
   }, [stopLoop]);
+
+  const injectTestFeedback = useCallback((feedbacks: LaneJudgmentFeedback[]) => {
+    if (testMode) {
+      setLaneJudgmentFeedbacks(feedbacks);
+    }
+  }, [testMode]);
+
+  useEffect(() => {
+    if (!testMode) {
+      return;
+    }
+
+    const win = window as Window & {
+      __injectTestFeedback?: typeof injectTestFeedback;
+      __practiceTestApi?: PracticeTestApi;
+    };
+
+    win.__injectTestFeedback = injectTestFeedback;
+    win.__practiceTestApi = {
+      startControlledGame: (partialConfig = {}) => {
+        const nextConfig = { ...config, ...partialConfig };
+        const nextNotes = createNotes(nextConfig);
+
+        controlledElapsedMsRef.current = 0;
+        notesRef.current = nextNotes;
+        setConfig(nextConfig);
+        setNotes(nextNotes);
+        setStats({
+          combo: 0,
+          maxCombo: 0,
+          perfect: 0,
+          good: 0,
+          miss: 0,
+          totalNotes: nextNotes.length,
+        });
+        setElapsedMs(0);
+        setLastFeedback(null);
+        setHitEffects([]);
+        setLanePressEffects([]);
+        setLaneJudgmentFeedbacks([]);
+        setGameState("playing");
+        window.setTimeout(() => focusPracticeRoot(), 0);
+      },
+      setElapsedMs: (nextElapsedMs) => {
+        syncElapsedForTest(nextElapsedMs);
+      },
+      getPendingNotes: () => notesRef.current.filter((note) => !note.judged).map(({ id, lane, time }) => ({ id, lane, time })),
+      focus: () => {
+        focusPracticeRoot();
+      },
+    };
+
+    return () => {
+      delete win.__injectTestFeedback;
+      delete win.__practiceTestApi;
+    };
+  }, [config, focusPracticeRoot, injectTestFeedback, syncElapsedForTest, testMode]);
 
   const accuracy = getAccuracy(stats);
   const judgedNotes = stats.perfect + stats.good + stats.miss;
@@ -548,7 +653,7 @@ export default function PracticePage() {
   const leadInRemaining = Math.max(0, Math.ceil((LEAD_IN_MS - elapsedMs) / 1000));
 
   return (
-    <main className="page-main" ref={rootRef} tabIndex={-1} onMouseDown={focusPracticeRoot}>
+    <main className="page-main" ref={rootRef} tabIndex={-1} onMouseDown={handleRootMouseDown}>
       <section className="page-section compact-hero">
         <div>
           <p className="eyebrow">PRACTICE MODE</p>
@@ -662,6 +767,7 @@ export default function PracticePage() {
               <span>왼쪽 키</span>
               <button
                 type="button"
+                aria-label="왼쪽 키"
                 className={`key-value-button${keyCaptureTarget === "left" ? " is-capturing" : ""}`}
                 onClick={() => setKeyCaptureTarget("left")}
                 disabled={gameState === "playing"}
@@ -674,6 +780,7 @@ export default function PracticePage() {
               <span>오른쪽 키</span>
               <button
                 type="button"
+                aria-label="오른쪽 키"
                 className={`key-value-button${keyCaptureTarget === "right" ? " is-capturing" : ""}`}
                 onClick={() => setKeyCaptureTarget("right")}
                 disabled={gameState === "playing"}

@@ -400,17 +400,6 @@ function MeasurePageContent() {
     setSequenceIndex,
   ]);
 
-  useEffect(() => {
-    const nextKeys = getDefaultKeys(pattern, measureVariant, activePreset);
-
-    const timer = window.setTimeout(() => {
-      setKeys(nextKeys);
-      setKeyCaptureTarget(null);
-      resetStats();
-    }, 0);
-
-    return () => window.clearTimeout(timer);
-  }, [activePreset, measureVariant, pattern, resetStats]);
 
   useEffect(() => {
     if (sessionState !== "countdown") return;
@@ -566,8 +555,12 @@ function MeasurePageContent() {
   }
 
   function applyPreset(variant: MeasureVariant) {
-    const preset = getPresetConfig(variant, pattern, drurukKeyCount);
+    const nextDrurukKeyCount = pattern === "druruk" && isDrurukVariant(variant) ? getDrurukProfile(variant).keyCount : drurukKeyCount;
+    const preset = getPresetConfig(variant, pattern, nextDrurukKeyCount);
     setSelectedVariant(variant);
+    if (pattern === "druruk" && isDrurukVariant(variant)) {
+      setDrurukKeyCount(nextDrurukKeyCount);
+    }
     setKeys(getDefaultKeys(pattern, variant, preset));
     setKeyCaptureTarget(null);
     setSessionState("idle");
@@ -639,8 +632,14 @@ function MeasurePageContent() {
                         key={`druruk-count-${count}`}
                         onClick={() => {
                           const nextCount = count as DrurukKeyCount;
+                          const nextVariant = getDefaultDrurukVariant(nextCount);
+                          const nextPreset = getPresetConfig(nextVariant, pattern, nextCount);
                           setDrurukKeyCount(nextCount);
-                          setSelectedVariant(getDefaultDrurukVariant(nextCount));
+                          setSelectedVariant(nextVariant);
+                          setKeys(getDefaultKeys(pattern, nextVariant, nextPreset));
+                          setKeyCaptureTarget(null);
+                          setSessionState("idle");
+                          resetStats();
                         }}
                         disabled={sessionState === "countdown" || sessionState === "running"}
                         className={`preset-card ${drurukKeyCount === count ? "is-active" : ""}`}
@@ -949,8 +948,8 @@ function KeySettingCard({
     <div className={`key-card ${isCapturing ? "is-capturing" : ""}`}>
       <span className="key-label">{label}</span>
       <div className="key-value">{normalizeKey(value) || "-"}</div>
-      <button type="button" onClick={onStartCapture} disabled={disabled} className="secondary-button">
-        {isCapturing ? "아무 키나 눌러주세요..." : "키 변경하기"}
+      <button type="button" onClick={onStartCapture} disabled={disabled} className="secondary-button" aria-pressed={isCapturing}>
+        {isCapturing ? "키 입력 중... (ESC 취소)" : "키 변경하기"}
       </button>
       <span className="hint-text">
         {isCapturing ? "다음 키 입력을 바로 이 슬롯에 저장해요. ESC로 취소할 수 있어요. ESC/TAB/ENTER/수정키는 사용할 수 없어요." : hint}

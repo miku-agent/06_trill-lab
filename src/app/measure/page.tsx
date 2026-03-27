@@ -401,8 +401,6 @@ function MeasurePageContent() {
   ]);
 
   useEffect(() => {
-    if (sessionState !== "idle") return;
-
     const nextKeys = getDefaultKeys(pattern, measureVariant, activePreset);
 
     const timer = window.setTimeout(() => {
@@ -412,7 +410,7 @@ function MeasurePageContent() {
     }, 0);
 
     return () => window.clearTimeout(timer);
-  }, [activePreset, measureVariant, pattern, resetStats, sessionState]);
+  }, [activePreset, measureVariant, pattern, resetStats]);
 
   useEffect(() => {
     if (sessionState !== "countdown") return;

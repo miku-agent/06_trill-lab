@@ -4,6 +4,7 @@ import Link from "next/link";
 import Script from "next/script";
 import { HeaderNav } from "./components/header-nav";
 import { ThemeToggle } from "./components/theme-toggle";
+import { ContactButton } from "./components/contact-modal";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -51,6 +52,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
             </Link>
             <HeaderNav />
             <div className="header-actions">
+              <ContactButton />
               <ThemeToggle />
             </div>
           </div>

@@ -74,8 +74,8 @@ main {
   min-height: 72px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 16px;
+  justify-content: flex-start;
+  gap: 32px;
 }
 
 .brand {
@@ -782,6 +782,7 @@ main {
 
 .brand-mark {
   color: var(--accent-strong);
+  font-size: 18px;
   font-weight: 800;
   letter-spacing: 0.14em;
 }

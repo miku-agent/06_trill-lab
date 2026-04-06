@@ -100,7 +100,7 @@ test.describe("/practice", () => {
     await expect(page.getByRole("heading", { name: "트릴 연습 세팅" })).toBeVisible();
     await expect(page.getByLabel("BPM")).toHaveValue("150");
     await expect(page.getByLabel("비트")).toHaveValue("4");
-    await expect(page.getByLabel("노트 속도")).toHaveValue("6.5");
+    await expect(page.getByLabel("노트 속도")).toHaveValue("7.5");
     await expect(page.locator(".practice-field").filter({ hasText: "LANE 2" }).locator("button")).toContainText("A");
     await expect(page.locator(".practice-field").filter({ hasText: "LANE 3" }).locator("button")).toContainText("'");
     await expect(page.getByText("BEAT LINE: 1/4 · 비트 4")).toBeVisible();

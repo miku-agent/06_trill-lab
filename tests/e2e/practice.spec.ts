@@ -141,7 +141,6 @@ test.describe("/practice", () => {
 
     await page.getByRole("button", { name: "초기화" }).click();
     await expect(page.getByRole("button", { name: "연습 시작" })).toBeVisible();
-    await expect(page.getByText("READY")).toBeVisible();
     await expect(page.getByText("JUDGED / TOTAL").locator("..").locator("strong")).toHaveText("0 / 0");
   });
 
@@ -156,7 +155,6 @@ test.describe("/practice", () => {
     await page.keyboard.press("a");
 
     await expect(page.locator(".practice-judgment-number-card.is-perfect strong")).toHaveText("1");
-    await expect(page.locator(".practice-judgment-toast strong")).toHaveText("PERFECT");
 
     const laneFeedback = page.locator('.practice-lane-feedback.is-perfect[data-lane="1"]');
     await expect(laneFeedback).toBeVisible();
@@ -182,7 +180,6 @@ test.describe("/practice", () => {
     await page.keyboard.press("'");
 
     await expect(page.locator(".practice-judgment-number-card.is-good strong")).toHaveText("1");
-    await expect(page.locator(".practice-judgment-toast strong")).toHaveText("GOOD");
 
     const laneFeedback = page.locator('.practice-lane-feedback.is-good[data-lane="2"]');
     await expect(laneFeedback).toBeVisible();

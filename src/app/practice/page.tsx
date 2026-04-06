@@ -16,14 +16,8 @@ import {
 type GameState = "idle" | "playing" | "ended";
 type EndMode = "firstMiss" | "timed";
 type JudgmentType = "perfect" | "good" | "miss";
-type FeedbackTone = JudgmentType | "early" | "wrong";
 type PracticePattern = Extract<PatternKey, "trill" | "druruk">;
 type NoteSubdivision = 1 | 2 | 4 | 8 | 16 | 32;
-
-type FeedbackState = {
-  label: string;
-  tone: FeedbackTone;
-};
 
 type Note = {
   id: number;
@@ -358,7 +352,6 @@ function PracticePageContent() {
     totalNotes: 0,
   });
   const [elapsedMs, setElapsedMs] = useState(0);
-  const [lastFeedback, setLastFeedback] = useState<FeedbackState | null>(null);
   const [keyCaptureTarget, setKeyCaptureTarget] = useState<number | null>(null);
   const [hitEffects, setHitEffects] = useState<HitEffect[]>([]);
   const [lanePressEffects, setLanePressEffects] = useState<LanePressEffect[]>([]);
@@ -368,7 +361,6 @@ function PracticePageContent() {
   const startAtRef = useRef(0);
   const rafRef = useRef<number | null>(null);
   const notesRef = useRef<Note[]>([]);
-  const lastJudgmentTimeoutRef = useRef<number | null>(null);
   const hitEffectIdRef = useRef(0);
   const laneFeedbackIdRef = useRef(0);
   const controlledElapsedMsRef = useRef<number | null>(null);
@@ -419,19 +411,6 @@ function PracticePageContent() {
     }, LANE_FEEDBACK_DURATION_MS);
   }, []);
 
-  const showFeedback = useCallback((label: string, tone: FeedbackTone) => {
-    setLastFeedback({ label, tone });
-
-    if (lastJudgmentTimeoutRef.current !== null) {
-      window.clearTimeout(lastJudgmentTimeoutRef.current);
-    }
-
-    lastJudgmentTimeoutRef.current = window.setTimeout(() => {
-      setLastFeedback(null);
-      lastJudgmentTimeoutRef.current = null;
-    }, 320);
-  }, []);
-
   const finishGame = useCallback(() => {
     stopLoop();
     setGameState("ended");
@@ -477,9 +456,8 @@ function PracticePageContent() {
       spawnHitEffect(lane);
     }
 
-    showFeedback(judgment.toUpperCase(), judgment);
     return true;
-  }, [showFeedback, spawnHitEffect]);
+  }, [spawnHitEffect]);
 
   const focusPracticeRoot = useCallback(() => {
     rootRef.current?.focus();
@@ -518,7 +496,7 @@ function PracticePageContent() {
     setNotes(nextNotes);
     setStats({ combo: 0, maxCombo: 0, perfect: 0, good: 0, miss: 0, totalNotes: nextNotes.length });
     setElapsedMs(0);
-    setLastFeedback(null);
+
     setHitEffects([]);
     setLanePressEffects([]);
     setLaneJudgmentFeedbacks([]);
@@ -533,7 +511,7 @@ function PracticePageContent() {
     notesRef.current = [];
     setElapsedMs(0);
     setNotes([]);
-    setLastFeedback(null);
+
     setHitEffects([]);
     setLanePressEffects([]);
     setLaneJudgmentFeedbacks([]);
@@ -616,28 +594,16 @@ function PracticePageContent() {
       triggerLanePressEffect(pressedLane);
 
       const target = notesRef.current.find((note) => !note.judged);
-      if (!target) {
-        showFeedback("CLEAR", "perfect");
-        return;
-      }
+      if (!target) return;
 
-      if (pressedLane !== target.lane) {
-        showFeedback("WRONG", "wrong");
-        return;
-      }
+      if (pressedLane !== target.lane) return;
 
       const currentTime = getCurrentElapsedMs();
       const delta = currentTime - target.time;
 
-      if (delta < -MISS_WINDOW_MS) {
-        showFeedback("EARLY", "early");
-        return;
-      }
+      if (delta < -MISS_WINDOW_MS) return;
 
-      if (delta > MISS_WINDOW_MS) {
-        showFeedback("LATE", "miss");
-        return;
-      }
+      if (delta > MISS_WINDOW_MS) return;
 
       const distance = Math.abs(delta);
       const judgment: JudgmentType = distance <= PERFECT_WINDOW_MS ? "perfect" : distance <= GOOD_WINDOW_MS ? "good" : "miss";
@@ -653,14 +619,11 @@ function PracticePageContent() {
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [activeLanes, applyJudgment, config.endMode, config.keyBindings, finishGame, gameState, getCurrentElapsedMs, keyCaptureTarget, showFeedback, spawnLaneJudgmentFeedback, triggerLanePressEffect]);
+  }, [activeLanes, applyJudgment, config.endMode, config.keyBindings, finishGame, gameState, getCurrentElapsedMs, keyCaptureTarget, spawnLaneJudgmentFeedback, triggerLanePressEffect]);
 
   useEffect(() => {
     return () => {
       stopLoop();
-      if (lastJudgmentTimeoutRef.current !== null) {
-        window.clearTimeout(lastJudgmentTimeoutRef.current);
-      }
     };
   }, [stopLoop]);
 
@@ -692,7 +655,7 @@ function PracticePageContent() {
         setNotes(nextNotes);
         setStats({ combo: 0, maxCombo: 0, perfect: 0, good: 0, miss: 0, totalNotes: nextNotes.length });
         setElapsedMs(0);
-        setLastFeedback(null);
+    
         setHitEffects([]);
         setLanePressEffects([]);
         setLaneJudgmentFeedbacks([]);
@@ -716,7 +679,6 @@ function PracticePageContent() {
 
   const accuracy = getAccuracy(stats);
   const judgedNotes = stats.perfect + stats.good + stats.miss;
-  const remainingNotes = Math.max(0, stats.totalNotes - judgedNotes);
   const remainingSeconds = config.endMode === "timed" ? Math.max(0, Math.ceil((config.duration * 1000 + LEAD_IN_MS - elapsedMs) / 1000)) : null;
   const leadInRemaining = Math.max(0, Math.ceil((LEAD_IN_MS - elapsedMs) / 1000));
   const hasDuplicateBindings = new Set(config.keyBindings).size !== config.keyBindings.length;
@@ -1019,12 +981,6 @@ function PracticePageContent() {
               </div>
             </div>
 
-            <div className="practice-next-box">
-              <span className="key-label">다음 입력</span>
-              <strong>{formatKeyLabel(config.keyBindings[Math.max(0, activeLanes.indexOf(nextExpectedLane))] ?? "-")}</strong>
-              <small>{spec.laneLabel(nextExpectedLane, config)}</small>
-            </div>
-
             <div className="practice-judgment-number-grid">
               <article className="practice-judgment-number-card is-perfect">
                 <span>PERFECT</span>
@@ -1042,12 +998,6 @@ function PracticePageContent() {
                 <span>JUDGED / TOTAL</span>
                 <strong>{judgedNotes} / {stats.totalNotes}</strong>
               </article>
-            </div>
-
-            <div className={`practice-judgment-toast${lastFeedback ? ` is-${lastFeedback.tone}` : ""}`}>
-              <span className="practice-judgment-toast-label">LAST</span>
-              <strong>{lastFeedback?.label ?? "READY"}</strong>
-              <small>{remainingNotes > 0 ? `남은 노트 ${remainingNotes}` : "모든 노트 판정 완료"}</small>
             </div>
 
             {gameState === "ended" ? (
@@ -1463,7 +1413,6 @@ function PracticePageContent() {
         }
 
         .practice-summary-box,
-        .practice-next-box,
         .practice-end-box {
           border-radius: 18px;
           border: 1px solid var(--line);
@@ -1477,16 +1426,11 @@ function PracticePageContent() {
           grid-template-columns: repeat(2, minmax(0, 1fr));
         }
 
-        .practice-next-box strong,
         .practice-summary-box strong,
         .practice-end-box strong {
           display: block;
           margin-top: 4px;
           font-size: 1.15rem;
-        }
-
-        .practice-next-box small {
-          color: var(--muted);
         }
 
         .practice-judgment-number-grid {
@@ -1533,59 +1477,6 @@ function PracticePageContent() {
           font-size: 1.2rem;
         }
 
-        .practice-judgment-toast {
-          border-radius: 18px;
-          padding: 16px;
-          text-align: center;
-          background: rgba(255, 255, 255, 0.04);
-          border: 1px solid var(--line);
-          color: var(--muted);
-          display: grid;
-          gap: 6px;
-        }
-
-        .practice-judgment-toast-label {
-          font-size: 11px;
-          font-weight: 800;
-          letter-spacing: 0.12em;
-          color: var(--muted);
-        }
-
-        .practice-judgment-toast strong {
-          font-size: 1.5rem;
-          line-height: 1;
-          letter-spacing: 0.08em;
-        }
-
-        .practice-judgment-toast small {
-          font-size: 12px;
-          color: var(--muted);
-        }
-
-        .practice-judgment-toast.is-perfect {
-          color: #ffe27a;
-          border-color: rgba(255, 226, 122, 0.45);
-        }
-
-        .practice-judgment-toast.is-good {
-          color: var(--accent-strong);
-          border-color: rgba(100, 245, 231, 0.45);
-        }
-
-        .practice-judgment-toast.is-miss {
-          color: var(--danger);
-          border-color: rgba(255, 122, 144, 0.4);
-        }
-
-        .practice-judgment-toast.is-early {
-          color: #d9dcff;
-          border-color: rgba(169, 178, 255, 0.35);
-        }
-
-        .practice-judgment-toast.is-wrong {
-          color: #ffb86b;
-          border-color: rgba(255, 184, 107, 0.38);
-        }
 
         @media (max-width: 980px) {
           .practice-play-grid {

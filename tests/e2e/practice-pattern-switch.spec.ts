@@ -48,9 +48,6 @@ test.describe("패턴 전환 상태 초기화", () => {
     await expect(page.getByRole("button", { name: "연습 시작" })).toBeVisible();
     await expect(page.getByRole("button", { name: "지금 종료" })).not.toBeVisible();
 
-    // READY 상태 표시 확인 (lastFeedback이 null이면 "READY" 표시)
-    await expect(page.locator(".practice-judgment-toast strong")).toHaveText("READY");
-
     // 이전 판정 통계가 초기화되었는지 확인
     await expect(page.getByText("JUDGED / TOTAL").locator("..").locator("strong")).toHaveText("0 / 0");
   });

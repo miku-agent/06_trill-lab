@@ -41,7 +41,7 @@ main {
 }
 
 .site-shell {
-  width: min(1180px, calc(100% - 32px));
+  width: min(1240px, calc(100% - 32px));
   margin: 0 auto;
 }
 
@@ -79,8 +79,16 @@ main {
 }
 
 .brand {
-  display: grid;
-  gap: 4px;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.brand-version {
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 400;
+  letter-spacing: 0.02em;
 }
 
 .brand-mark,
@@ -101,22 +109,20 @@ main {
 }
 
 .site-nav-link {
-  padding: 10px 14px;
-  border-radius: 999px;
-  border: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.03);
+  padding: 8px 16px 12px;
   color: var(--muted);
+  font-weight: 500;
+  border-bottom: 2px solid transparent;
+  transition: color 0.15s, border-color 0.15s;
 }
 
 .site-nav-link:hover {
   color: var(--text);
-  border-color: rgba(100, 245, 231, 0.5);
 }
 
 .site-nav-link.is-active {
-  color: #062127;
-  background: linear-gradient(135deg, var(--accent), var(--accent-strong));
-  border-color: transparent;
+  color: var(--accent-strong);
+  border-bottom-color: var(--accent-strong);
 }
 
 .page-main {
@@ -843,12 +849,6 @@ main {
   }
 }
 
-.site-header-brand-row {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  flex-wrap: wrap;
-}
 
 .pattern-switcher {
   display: flex;
@@ -925,10 +925,5 @@ main {
 @media (max-width: 900px) {
   .site-header-inner {
     align-items: flex-start;
-  }
-
-  .site-header-brand-row {
-    width: 100%;
-    justify-content: space-between;
   }
 }

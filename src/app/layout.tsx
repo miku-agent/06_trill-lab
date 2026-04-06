@@ -2,9 +2,7 @@ import type { Metadata } from "next";
 import packageJson from "../../package.json";
 import Link from "next/link";
 import Script from "next/script";
-import { Suspense } from "react";
 import { HeaderNav } from "./components/header-nav";
-import { PatternSwitcher } from "./components/pattern-switcher";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -38,15 +36,10 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         </noscript>
         <header className="site-header">
           <div className="site-shell site-header-inner">
-            <div className="site-header-brand-row">
-              <Link href="/" className="brand">
-                <span className="brand-mark">TRILL LAB</span>
-                <strong>Trill practice studio</strong>
-              </Link>
-              <Suspense fallback={null}>
-                <PatternSwitcher />
-              </Suspense>
-            </div>
+            <Link href="/" className="brand">
+              <span className="brand-mark">TRILL LAB</span>
+              <span className="brand-version">v{APP_VERSION}</span>
+            </Link>
             <HeaderNav />
           </div>
         </header>

@@ -535,20 +535,17 @@ function MeasurePageContent({ patternKey }: { patternKey: PatternKey }) {
         triggerHitFeedback("good");
         const timestamp = performance.now();
         const expectedStepIndex = expectedIndexRef.current % expectedSequence.length;
-        acceptedTimestampsRef.current = [...acceptedTimestampsRef.current, timestamp];
-        acceptedStepIndicesRef.current = [...acceptedStepIndicesRef.current, expectedStepIndex];
+        acceptedTimestampsRef.current.push(timestamp);
+        acceptedStepIndicesRef.current.push(expectedStepIndex);
 
         if (pattern === "druruk") {
-          const runTimestamps = [...currentRunTimestampsRef.current, timestamp];
-          currentRunTimestampsRef.current = runTimestamps;
-          if (runTimestamps.length === expectedSequence.length) {
-            completedRunsRef.current = [
-              ...completedRunsRef.current,
-              {
-                durationMs: runTimestamps[runTimestamps.length - 1] - runTimestamps[0],
-                intervals: runTimestamps.slice(1).map((timestamp, index) => timestamp - runTimestamps[index]),
-              },
-            ];
+          currentRunTimestampsRef.current.push(timestamp);
+          if (currentRunTimestampsRef.current.length === expectedSequence.length) {
+            const runTs = currentRunTimestampsRef.current;
+            completedRunsRef.current.push({
+              durationMs: runTs[runTs.length - 1] - runTs[0],
+              intervals: runTs.slice(1).map((ts, index) => ts - runTs[index]),
+            });
             currentRunTimestampsRef.current = [];
           }
         }

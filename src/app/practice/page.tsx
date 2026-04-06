@@ -352,7 +352,17 @@ function PracticePageContent() {
   const laneFeedbackIdRef = useRef(0);
   const controlledElapsedMsRef = useRef<number | null>(null);
   const timingHistoryRef = useRef<TimingPoint[]>([]);
+  const timerIdsRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
   const [timingHistory, setTimingHistory] = useState<TimingPoint[]>([]);
+
+  const safeSetTimeout = useCallback((cb: () => void, delay: number) => {
+    const id = setTimeout(() => {
+      timerIdsRef.current.delete(id);
+      cb();
+    }, delay);
+    timerIdsRef.current.add(id);
+    return id;
+  }, []);
 
   const stopLoop = useCallback(() => {
     if (rafRef.current !== null) {
@@ -374,19 +384,19 @@ function PracticePageContent() {
     const id = hitEffectIdRef.current++;
     setHitEffects((prev) => [...prev, { id, lane }]);
 
-    window.setTimeout(() => {
+    safeSetTimeout(() => {
       setHitEffects((prev) => prev.filter((effect) => effect.id !== id));
     }, HIT_EFFECT_DURATION_MS);
-  }, []);
+  }, [safeSetTimeout]);
 
   const triggerLanePressEffect = useCallback((lane: number) => {
     const activatedAt = performance.now();
     setLanePressEffects((prev) => [...prev.filter((effect) => effect.lane !== lane), { lane, activatedAt }]);
 
-    window.setTimeout(() => {
+    safeSetTimeout(() => {
       setLanePressEffects((prev) => prev.filter((effect) => !(effect.lane === lane && effect.activatedAt === activatedAt)));
     }, LANE_PRESS_EFFECT_DURATION_MS);
-  }, []);
+  }, [safeSetTimeout]);
 
   const spawnLaneJudgmentFeedback = useCallback((lane: number, judgment: JudgmentType, deltaMs: number) => {
     const id = laneFeedbackIdRef.current++;
@@ -396,13 +406,13 @@ function PracticePageContent() {
     setLaneJudgmentFeedbacks((prev) => [...prev.filter((feedback) => feedback.lane !== lane), { id, lane, judgment, signedMs, timingLabel }]);
 
     const point: TimingPoint = { id, deltaMs, judgment };
-    timingHistoryRef.current = [...timingHistoryRef.current, point];
-    setTimingHistory(timingHistoryRef.current);
+    timingHistoryRef.current.push(point);
+    setTimingHistory(timingHistoryRef.current.length <= 500 ? [...timingHistoryRef.current] : timingHistoryRef.current.slice(-500));
 
-    window.setTimeout(() => {
+    safeSetTimeout(() => {
       setLaneJudgmentFeedbacks((prev) => prev.filter((feedback) => feedback.id !== id));
     }, LANE_FEEDBACK_DURATION_MS);
-  }, []);
+  }, [safeSetTimeout]);
 
   const finishGame = useCallback(() => {
     stopLoop();
@@ -482,9 +492,9 @@ function PracticePageContent() {
       staleMisses.forEach((note) => {
         applyJudgment(note.id, "miss", note.lane);
         const point: TimingPoint = { id: note.id, deltaMs: MISS_WINDOW_MS, judgment: "miss" };
-        timingHistoryRef.current = [...timingHistoryRef.current, point];
+        timingHistoryRef.current.push(point);
       });
-      setTimingHistory(timingHistoryRef.current);
+      setTimingHistory(timingHistoryRef.current.length <= 500 ? [...timingHistoryRef.current] : timingHistoryRef.current.slice(-500));
     }
   }, [applyJudgment]);
 
@@ -503,8 +513,8 @@ function PracticePageContent() {
     setGameState("playing");
     controlledElapsedMsRef.current = null;
     startAtRef.current = performance.now();
-    window.setTimeout(() => focusPracticeRoot(), 0);
-  }, [config, focusPracticeRoot]);
+    safeSetTimeout(() => focusPracticeRoot(), 0);
+  }, [config, focusPracticeRoot, safeSetTimeout]);
 
   const resetToIdle = useCallback(() => {
     stopLoop();
@@ -544,9 +554,9 @@ function PracticePageContent() {
         staleMisses.forEach((note) => {
           applyJudgment(note.id, "miss", note.lane);
           const point: TimingPoint = { id: note.id, deltaMs: MISS_WINDOW_MS, judgment: "miss" };
-          timingHistoryRef.current = [...timingHistoryRef.current, point];
+          timingHistoryRef.current.push(point);
         });
-        setTimingHistory(timingHistoryRef.current);
+        setTimingHistory(timingHistoryRef.current.length <= 500 ? [...timingHistoryRef.current] : timingHistoryRef.current.slice(-500));
 
         if (config.endMode === "firstMiss") {
           finishGame();
@@ -629,6 +639,8 @@ function PracticePageContent() {
   useEffect(() => {
     return () => {
       stopLoop();
+      timerIdsRef.current.forEach((id) => clearTimeout(id));
+      timerIdsRef.current.clear();
     };
   }, [stopLoop]);
 
@@ -665,7 +677,7 @@ function PracticePageContent() {
         setLanePressEffects([]);
         setLaneJudgmentFeedbacks([]);
         setGameState("playing");
-        window.setTimeout(() => focusPracticeRoot(), 0);
+        safeSetTimeout(() => focusPracticeRoot(), 0);
       },
       setElapsedMs: (nextElapsedMs) => {
         syncElapsedForTest(nextElapsedMs);
@@ -680,7 +692,7 @@ function PracticePageContent() {
       delete win.__injectTestFeedback;
       delete win.__practiceTestApi;
     };
-  }, [config, focusPracticeRoot, injectTestFeedback, syncElapsedForTest, testMode]);
+  }, [config, focusPracticeRoot, injectTestFeedback, safeSetTimeout, syncElapsedForTest, testMode]);
 
   const accuracy = getAccuracy(stats);
   const judgedNotes = stats.perfect + stats.good + stats.miss;

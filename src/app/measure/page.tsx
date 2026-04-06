@@ -10,7 +10,8 @@ import {
   type MeasureResult as Result,
   type MeasureVariant,
 } from "../lib/measure-history";
-import { getPatternDefinition, type PatternKey } from "../lib/patterns";
+import Link from "next/link";
+import { getPatternDefinition, PATTERN_DEFINITIONS, type PatternKey } from "../lib/patterns";
 import {
   getDefaultDrurukVariant,
   getDrurukKeyHints,
@@ -184,14 +185,47 @@ function trackEvent(event: string, payload: AnalyticsPayload = {}) {
 export default function MeasurePage() {
   return (
     <Suspense fallback={<main className="page-main measure-page" />}>
-      <MeasurePageContent />
+      <PatternRouter />
     </Suspense>
   );
 }
 
-function MeasurePageContent() {
+function PatternSelectView() {
+  return (
+    <main className="page-main">
+      <section className="page-section hero-section">
+        <span className="eyebrow">PATTERN SELECT</span>
+        <h1 className="page-title">어떤 패턴을 측정할까요?</h1>
+        <p className="section-subtitle">패턴을 고르면 바로 측정을 시작할 수 있어요.</p>
+      </section>
+      <section className="pattern-select-grid" aria-label="패턴 선택">
+        {PATTERN_DEFINITIONS.map((p) => (
+          <Link key={p.key} href={p.href} className="pattern-select-card panel">
+            <strong>{p.label}</strong>
+            <p>{p.description}</p>
+            <span>측정 시작</span>
+          </Link>
+        ))}
+      </section>
+    </main>
+  );
+}
+
+function PatternRouter() {
   const searchParams = useSearchParams();
-  const pattern = getPatternDefinition(searchParams.get("pattern")).key;
+  const rawPattern = searchParams.get("pattern");
+  const validPatternKeys: string[] = PATTERN_DEFINITIONS.map((p) => p.key);
+  const hasValidPattern = rawPattern !== null && validPatternKeys.includes(rawPattern);
+
+  if (!hasValidPattern) {
+    return <PatternSelectView />;
+  }
+
+  return <MeasurePageContent patternKey={rawPattern as PatternKey} />;
+}
+
+function MeasurePageContent({ patternKey }: { patternKey: PatternKey }) {
+  const pattern = patternKey;
   const mode = PATTERN_MODES[pattern];
 
   const [drurukKeyCount, setDrurukKeyCount] = useState<DrurukKeyCount>(6);
@@ -488,20 +522,17 @@ function MeasurePageContent() {
         triggerHitFeedback("good");
         const timestamp = performance.now();
         const expectedStepIndex = expectedIndexRef.current % expectedSequence.length;
-        acceptedTimestampsRef.current = [...acceptedTimestampsRef.current, timestamp];
-        acceptedStepIndicesRef.current = [...acceptedStepIndicesRef.current, expectedStepIndex];
+        acceptedTimestampsRef.current.push(timestamp);
+        acceptedStepIndicesRef.current.push(expectedStepIndex);
 
         if (pattern === "druruk") {
-          const runTimestamps = [...currentRunTimestampsRef.current, timestamp];
-          currentRunTimestampsRef.current = runTimestamps;
-          if (runTimestamps.length === expectedSequence.length) {
-            completedRunsRef.current = [
-              ...completedRunsRef.current,
-              {
-                durationMs: runTimestamps[runTimestamps.length - 1] - runTimestamps[0],
-                intervals: runTimestamps.slice(1).map((timestamp, index) => timestamp - runTimestamps[index]),
-              },
-            ];
+          currentRunTimestampsRef.current.push(timestamp);
+          if (currentRunTimestampsRef.current.length === expectedSequence.length) {
+            const runTs = currentRunTimestampsRef.current;
+            completedRunsRef.current.push({
+              durationMs: runTs[runTs.length - 1] - runTs[0],
+              intervals: runTs.slice(1).map((ts, index) => ts - runTs[index]),
+            });
             currentRunTimestampsRef.current = [];
           }
         }

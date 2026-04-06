@@ -16,14 +16,8 @@ import {
 type GameState = "idle" | "playing" | "ended";
 type EndMode = "firstMiss" | "timed";
 type JudgmentType = "perfect" | "good" | "miss";
-type FeedbackTone = JudgmentType | "early" | "wrong";
 type PracticePattern = Extract<PatternKey, "trill" | "druruk">;
 type NoteSubdivision = 1 | 2 | 4 | 8 | 16 | 32;
-
-type FeedbackState = {
-  label: string;
-  tone: FeedbackTone;
-};
 
 type Note = {
   id: number;
@@ -52,9 +46,15 @@ type LanePressEffect = {
 type LaneJudgmentFeedback = {
   id: number;
   lane: number;
-  judgment: Extract<JudgmentType, "perfect" | "good">;
+  judgment: JudgmentType;
   signedMs: string;
   timingLabel: "FAST" | "SLOW";
+};
+
+type TimingPoint = {
+  id: number;
+  deltaMs: number;
+  judgment: JudgmentType;
 };
 
 type PracticeTestApi = {
@@ -89,20 +89,15 @@ type PatternSpec = {
   key: PracticePattern;
   title: string;
   heroTitle: string;
-  heroSubtitle: string;
   statusLabel: string;
   configTitle: string;
-  configNote: string;
   railTitle: string;
   railBadges: (config: GameConfig) => string[];
-  helpIdle: string | ((config: GameConfig) => string);
-  helpPlaying: (config: GameConfig) => string;
   laneCount: number;
   activeLaneIndexes: (config: GameConfig) => number[];
   defaultBindings: (config: GameConfig) => string[];
   sequenceFor: (config: GameConfig) => number[];
   laneLabel: (lane: number, config: GameConfig) => string;
-  settingsSummary: (config: GameConfig) => string;
 };
 
 const LEAD_IN_MS = 1800;
@@ -117,7 +112,6 @@ const JUDGMENT_LINE_Y = 430;
 const HIT_EFFECT_DURATION_MS = 260;
 const LANE_PRESS_EFFECT_DURATION_MS = 120;
 const LANE_FEEDBACK_DURATION_MS = 720;
-const LANE_FEEDBACK_GAP_PX = 12;
 const MIN_TRAVEL_MS = 260;
 const MAX_TRAVEL_MS = 1050;
 
@@ -125,7 +119,7 @@ const DEFAULT_CONFIG: GameConfig = {
   pattern: "trill",
   bpm: 150,
   subdivision: 4,
-  speed: 6.5,
+  speed: 7.5,
   endMode: "timed",
   duration: 30,
   keyBindings: ["a", "'"],
@@ -140,29 +134,22 @@ const PRACTICE_PATTERN_SPECS: Record<PracticePattern, PatternSpec> = {
     key: "trill",
     title: "트릴",
     heroTitle: "연습 모드",
-    heroSubtitle: "중앙 2레인 트릴을 리듬게임식 레일에서 바로 연습할 수 있어요.",
     statusLabel: "TRILL PRACTICE",
     configTitle: "트릴 연습 세팅",
-    configNote: "4레인 베이스 위에서 중앙 2레인만 활성화되는 기존 트릴 연습을 유지해요.",
     railTitle: "4레인 트릴 레일",
     railBadges: (config) => ["ACTIVE: 2 / 4 레인", "NOTE WIDTH: FULL", `BEAT LINE: 1/4 · 비트 ${config.subdivision}`],
-    helpIdle: "연습을 시작하면 중앙 2레인에서 트릴 노트가 떨어져요.",
-    helpPlaying: (config) => `중앙 2레인에 맞춰 ${formatKeyLabel(config.keyBindings[0])} / ${formatKeyLabel(config.keyBindings[1])} 를 번갈아 눌러주세요.`,
     laneCount: 4,
     activeLaneIndexes: () => TRILL_ACTIVE_LANES,
     defaultBindings: () => ["a", "'"],
     sequenceFor: () => TRILL_ACTIVE_LANES,
     laneLabel: (lane) => `LANE ${lane + 1}`,
-    settingsSummary: (config) => `${formatKeyLabel(config.keyBindings[0])} / ${formatKeyLabel(config.keyBindings[1])} 중앙 2레인 트릴`,
   },
   druruk: {
     key: "druruk",
     title: "드르륵",
     heroTitle: "연습 모드",
-    heroSubtitle: "4키/6키 계단 입력을 순방향/역방향으로 바로 연습할 수 있어요.",
     statusLabel: "DRURUK",
     configTitle: "드르륵 세팅",
-    configNote: "키 수와 방향을 바꾸면 해당 계열 패턴으로 바로 판정이 바뀌어요.",
     railTitle: "드르륵 레일",
     railBadges: (config) => {
       const profile = getDrurukProfile(getDefaultDrurukVariant(config.drurukKeyCount === 4 ? 4 : 6));
@@ -175,18 +162,11 @@ const PRACTICE_PATTERN_SPECS: Record<PracticePattern, PatternSpec> = {
         `BEAT LINE: 1/4 · 비트 ${config.subdivision}`,
       ];
     },
-    helpIdle: (config) => `${config.drurukKeyCount}레인 전체에 드르륵 노트가 순서대로 떨어져요.`,
-    helpPlaying: (config) =>
-      config.direction === "forward"
-        ? `${config.drurukKeyCount}키 ${config.keyBindings.map(formatKeyLabel).join(" → ")} 순서로 눌러주세요.`
-        : `${config.drurukKeyCount}키 ${config.keyBindings.slice(0, config.drurukKeyCount).reverse().map(formatKeyLabel).join(" → ")} 순서로 눌러주세요.`,
     laneCount: 6,
     activeLaneIndexes: (config) => getDrurukLaneIndexes(config.drurukKeyCount, "forward"),
     defaultBindings: (config) => getDrurukProfile(getDefaultDrurukVariant(config.drurukKeyCount)).defaultKeys.map((key) => key.toLowerCase()),
     sequenceFor: (config) => getDrurukLaneIndexes(config.drurukKeyCount, config.direction),
     laneLabel: (lane, config) => getDrurukKeyLabels(config.drurukKeyCount)[lane] ?? `${lane + 1}번`,
-    settingsSummary: (config) =>
-      `${config.drurukKeyCount}키 · ${config.direction === "forward" ? "정방향" : "역방향"} · ${config.keyBindings.map(formatKeyLabel).join(" / ")}`,
   },
 };
 
@@ -330,9 +310,15 @@ function getPlayablePattern(input: string | null | undefined): PracticePattern {
 export default function PracticePage() {
   return (
     <Suspense fallback={<main className="page-main" />}>
-      <PracticePageContent />
+      <PracticePageRouter />
     </Suspense>
   );
+}
+
+function PracticePageRouter() {
+  const searchParams = useSearchParams();
+  const pattern = getPlayablePattern(searchParams.get("pattern"));
+  return <PracticePageContent key={pattern} />;
 }
 
 function PracticePageContent() {
@@ -353,7 +339,6 @@ function PracticePageContent() {
     totalNotes: 0,
   });
   const [elapsedMs, setElapsedMs] = useState(0);
-  const [lastFeedback, setLastFeedback] = useState<FeedbackState | null>(null);
   const [keyCaptureTarget, setKeyCaptureTarget] = useState<number | null>(null);
   const [hitEffects, setHitEffects] = useState<HitEffect[]>([]);
   const [lanePressEffects, setLanePressEffects] = useState<LanePressEffect[]>([]);
@@ -363,15 +348,29 @@ function PracticePageContent() {
   const startAtRef = useRef(0);
   const rafRef = useRef<number | null>(null);
   const notesRef = useRef<Note[]>([]);
-  const lastJudgmentTimeoutRef = useRef<number | null>(null);
   const hitEffectIdRef = useRef(0);
   const laneFeedbackIdRef = useRef(0);
   const controlledElapsedMsRef = useRef<number | null>(null);
+  const timingHistoryRef = useRef<TimingPoint[]>([]);
+  const timerIdsRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
+  const [timingHistory, setTimingHistory] = useState<TimingPoint[]>([]);
 
-  useEffect(() => {
-    notesRef.current = [];
-    controlledElapsedMsRef.current = null;
-  }, [pattern]);
+  const safeSetTimeout = useCallback((cb: () => void, delay: number) => {
+    const id = setTimeout(() => {
+      timerIdsRef.current.delete(id);
+      cb();
+    }, delay);
+    timerIdsRef.current.add(id);
+    return id;
+  }, []);
+
+  const stopLoop = useCallback(() => {
+    if (rafRef.current !== null) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
+  }, []);
+
 
   const travelMs = useMemo(() => getTravelMs(config.speed), [config.speed]);
   const beatGuideLines = useMemo(() => createBeatGuideLines(config), [config]);
@@ -381,55 +380,42 @@ function PracticePageContent() {
   const nextExpectedNote = useMemo(() => notes.find((note) => !note.judged) ?? null, [notes]);
   const nextExpectedLane = nextExpectedNote?.lane ?? sequence[0] ?? 0;
 
-  const stopLoop = useCallback(() => {
-    if (rafRef.current !== null) {
-      cancelAnimationFrame(rafRef.current);
-      rafRef.current = null;
-    }
-  }, []);
-
   const spawnHitEffect = useCallback((lane: number) => {
     const id = hitEffectIdRef.current++;
     setHitEffects((prev) => [...prev, { id, lane }]);
 
-    window.setTimeout(() => {
+    safeSetTimeout(() => {
       setHitEffects((prev) => prev.filter((effect) => effect.id !== id));
     }, HIT_EFFECT_DURATION_MS);
-  }, []);
+  }, [safeSetTimeout]);
 
   const triggerLanePressEffect = useCallback((lane: number) => {
     const activatedAt = performance.now();
     setLanePressEffects((prev) => [...prev.filter((effect) => effect.lane !== lane), { lane, activatedAt }]);
 
-    window.setTimeout(() => {
+    safeSetTimeout(() => {
       setLanePressEffects((prev) => prev.filter((effect) => !(effect.lane === lane && effect.activatedAt === activatedAt)));
     }, LANE_PRESS_EFFECT_DURATION_MS);
-  }, []);
+  }, [safeSetTimeout]);
 
-  const spawnLaneJudgmentFeedback = useCallback((lane: number, judgment: Extract<JudgmentType, "perfect" | "good">, deltaMs: number) => {
+  const spawnLaneJudgmentFeedback = useCallback((lane: number, judgment: JudgmentType, deltaMs: number) => {
     const id = laneFeedbackIdRef.current++;
     const signedMs = formatSignedMs(deltaMs);
     const timingLabel: "FAST" | "SLOW" = deltaMs < 0 ? "FAST" : "SLOW";
 
     setLaneJudgmentFeedbacks((prev) => [...prev.filter((feedback) => feedback.lane !== lane), { id, lane, judgment, signedMs, timingLabel }]);
 
-    window.setTimeout(() => {
+    const point: TimingPoint = { id, deltaMs, judgment };
+    timingHistoryRef.current.push(point);
+    if (timingHistoryRef.current.length > 500) {
+      timingHistoryRef.current = timingHistoryRef.current.slice(-500);
+    }
+    setTimingHistory([...timingHistoryRef.current]);
+
+    safeSetTimeout(() => {
       setLaneJudgmentFeedbacks((prev) => prev.filter((feedback) => feedback.id !== id));
     }, LANE_FEEDBACK_DURATION_MS);
-  }, []);
-
-  const showFeedback = useCallback((label: string, tone: FeedbackTone) => {
-    setLastFeedback({ label, tone });
-
-    if (lastJudgmentTimeoutRef.current !== null) {
-      window.clearTimeout(lastJudgmentTimeoutRef.current);
-    }
-
-    lastJudgmentTimeoutRef.current = window.setTimeout(() => {
-      setLastFeedback(null);
-      lastJudgmentTimeoutRef.current = null;
-    }, 320);
-  }, []);
+  }, [safeSetTimeout]);
 
   const finishGame = useCallback(() => {
     stopLoop();
@@ -476,9 +462,8 @@ function PracticePageContent() {
       spawnHitEffect(lane);
     }
 
-    showFeedback(judgment.toUpperCase(), judgment);
     return true;
-  }, [showFeedback, spawnHitEffect]);
+  }, [spawnHitEffect]);
 
   const focusPracticeRoot = useCallback(() => {
     rootRef.current?.focus();
@@ -506,9 +491,17 @@ function PracticePageContent() {
 
     const staleMisses = notesRef.current.filter((note) => !note.judged && nextElapsedMs - note.time > MISS_WINDOW_MS);
 
-    staleMisses.forEach((note) => {
-      applyJudgment(note.id, "miss", note.lane);
-    });
+    if (staleMisses.length > 0) {
+      staleMisses.forEach((note) => {
+        applyJudgment(note.id, "miss", note.lane);
+        const point: TimingPoint = { id: note.id, deltaMs: MISS_WINDOW_MS, judgment: "miss" };
+        timingHistoryRef.current.push(point);
+      });
+      if (timingHistoryRef.current.length > 500) {
+        timingHistoryRef.current = timingHistoryRef.current.slice(-500);
+      }
+      setTimingHistory([...timingHistoryRef.current]);
+    }
   }, [applyJudgment]);
 
   const startGame = useCallback(() => {
@@ -517,25 +510,29 @@ function PracticePageContent() {
     setNotes(nextNotes);
     setStats({ combo: 0, maxCombo: 0, perfect: 0, good: 0, miss: 0, totalNotes: nextNotes.length });
     setElapsedMs(0);
-    setLastFeedback(null);
+
     setHitEffects([]);
     setLanePressEffects([]);
     setLaneJudgmentFeedbacks([]);
+    timingHistoryRef.current = [];
+    setTimingHistory([]);
     setGameState("playing");
     controlledElapsedMsRef.current = null;
     startAtRef.current = performance.now();
-    window.setTimeout(() => focusPracticeRoot(), 0);
-  }, [config, focusPracticeRoot]);
+    safeSetTimeout(() => focusPracticeRoot(), 0);
+  }, [config, focusPracticeRoot, safeSetTimeout]);
 
   const resetToIdle = useCallback(() => {
     stopLoop();
     notesRef.current = [];
     setElapsedMs(0);
     setNotes([]);
-    setLastFeedback(null);
+
     setHitEffects([]);
     setLanePressEffects([]);
     setLaneJudgmentFeedbacks([]);
+    timingHistoryRef.current = [];
+    setTimingHistory([]);
     setStats({ combo: 0, maxCombo: 0, perfect: 0, good: 0, miss: 0, totalNotes: 0 });
     controlledElapsedMsRef.current = null;
     setGameState("idle");
@@ -562,7 +559,13 @@ function PracticePageContent() {
       if (staleMisses.length > 0) {
         staleMisses.forEach((note) => {
           applyJudgment(note.id, "miss", note.lane);
+          const point: TimingPoint = { id: note.id, deltaMs: MISS_WINDOW_MS, judgment: "miss" };
+          timingHistoryRef.current.push(point);
         });
+        if (timingHistoryRef.current.length > 500) {
+          timingHistoryRef.current = timingHistoryRef.current.slice(-500);
+        }
+        setTimingHistory([...timingHistoryRef.current]);
 
         if (config.endMode === "firstMiss") {
           finishGame();
@@ -607,44 +610,31 @@ function PracticePageContent() {
 
       if (gameState !== "playing") return;
 
-      const pressedLane = config.keyBindings.findIndex((binding) => matchesBinding(event, binding));
-      if (pressedLane < 0) return;
+      const pressedKeyIndex = config.keyBindings.findIndex((binding) => matchesBinding(event, binding));
+      if (pressedKeyIndex < 0) return;
+      const pressedLane = activeLanes[pressedKeyIndex] ?? pressedKeyIndex;
 
       event.preventDefault();
       triggerLanePressEffect(pressedLane);
 
       const target = notesRef.current.find((note) => !note.judged);
-      if (!target) {
-        showFeedback("CLEAR", "perfect");
-        return;
-      }
+      if (!target) return;
 
-      if (pressedLane !== target.lane) {
-        showFeedback("WRONG", "wrong");
-        return;
-      }
+      if (pressedLane !== target.lane) return;
 
       const currentTime = getCurrentElapsedMs();
       const delta = currentTime - target.time;
 
-      if (delta < -MISS_WINDOW_MS) {
-        showFeedback("EARLY", "early");
-        return;
-      }
+      if (delta < -MISS_WINDOW_MS) return;
 
-      if (delta > MISS_WINDOW_MS) {
-        showFeedback("LATE", "miss");
-        return;
-      }
+      if (delta > MISS_WINDOW_MS) return;
 
       const distance = Math.abs(delta);
       const judgment: JudgmentType = distance <= PERFECT_WINDOW_MS ? "perfect" : distance <= GOOD_WINDOW_MS ? "good" : "miss";
       const applied = applyJudgment(target.id, judgment, target.lane);
       if (!applied) return;
 
-      if (judgment === "perfect" || judgment === "good") {
-        spawnLaneJudgmentFeedback(target.lane, judgment, delta);
-      }
+      spawnLaneJudgmentFeedback(target.lane, judgment, delta);
 
       if (config.endMode === "firstMiss" && judgment === "miss") {
         finishGame();
@@ -653,14 +643,14 @@ function PracticePageContent() {
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [applyJudgment, config.endMode, config.keyBindings, finishGame, gameState, getCurrentElapsedMs, keyCaptureTarget, showFeedback, spawnLaneJudgmentFeedback, triggerLanePressEffect]);
+  }, [activeLanes, applyJudgment, config.endMode, config.keyBindings, finishGame, gameState, getCurrentElapsedMs, keyCaptureTarget, spawnLaneJudgmentFeedback, triggerLanePressEffect]);
 
   useEffect(() => {
+    const timers = timerIdsRef.current;
     return () => {
       stopLoop();
-      if (lastJudgmentTimeoutRef.current !== null) {
-        window.clearTimeout(lastJudgmentTimeoutRef.current);
-      }
+      timers.forEach((id) => clearTimeout(id));
+      timers.clear();
     };
   }, [stopLoop]);
 
@@ -692,12 +682,12 @@ function PracticePageContent() {
         setNotes(nextNotes);
         setStats({ combo: 0, maxCombo: 0, perfect: 0, good: 0, miss: 0, totalNotes: nextNotes.length });
         setElapsedMs(0);
-        setLastFeedback(null);
+    
         setHitEffects([]);
         setLanePressEffects([]);
         setLaneJudgmentFeedbacks([]);
         setGameState("playing");
-        window.setTimeout(() => focusPracticeRoot(), 0);
+        safeSetTimeout(() => focusPracticeRoot(), 0);
       },
       setElapsedMs: (nextElapsedMs) => {
         syncElapsedForTest(nextElapsedMs);
@@ -712,11 +702,10 @@ function PracticePageContent() {
       delete win.__injectTestFeedback;
       delete win.__practiceTestApi;
     };
-  }, [config, focusPracticeRoot, injectTestFeedback, syncElapsedForTest, testMode]);
+  }, [config, focusPracticeRoot, injectTestFeedback, safeSetTimeout, syncElapsedForTest, testMode]);
 
   const accuracy = getAccuracy(stats);
   const judgedNotes = stats.perfect + stats.good + stats.miss;
-  const remainingNotes = Math.max(0, stats.totalNotes - judgedNotes);
   const remainingSeconds = config.endMode === "timed" ? Math.max(0, Math.ceil((config.duration * 1000 + LEAD_IN_MS - elapsedMs) / 1000)) : null;
   const leadInRemaining = Math.max(0, Math.ceil((LEAD_IN_MS - elapsedMs) / 1000));
   const hasDuplicateBindings = new Set(config.keyBindings).size !== config.keyBindings.length;
@@ -727,7 +716,6 @@ function PracticePageContent() {
         <div>
           <p className="eyebrow">PRACTICE MODE</p>
           <h1 className="page-title">{spec.heroTitle}</h1>
-          <p className="section-subtitle">{spec.heroSubtitle}</p>
         </div>
         <div className="status-pill">{spec.statusLabel}</div>
       </section>
@@ -751,7 +739,6 @@ function PracticePageContent() {
               <p className="section-label">설정</p>
               <h2 className="section-title">{spec.configTitle}</h2>
             </div>
-            <p className="inline-note">{spec.configNote}</p>
           </div>
 
           <div className="practice-config-grid">
@@ -797,7 +784,6 @@ function PracticePageContent() {
                 onChange={(event) => setConfig((prev) => ({ ...prev, speed: clamp(Number(event.target.value) || 0, 0, 10) }))}
                 disabled={gameState === "playing"}
               />
-              <small className="practice-field-hint">속도 값을 올릴수록 판정선까지 더 빠르게 도달해요.</small>
             </label>
 
             <label className="practice-field">
@@ -864,7 +850,7 @@ function PracticePageContent() {
           <div className="practice-key-grid">
             {config.keyBindings.slice(0, pattern === "druruk" ? config.drurukKeyCount : config.keyBindings.length).map((binding, index) => (
               <div key={`${pattern}-binding-${index}`} className="practice-field">
-                <span>{spec.laneLabel(index, config)} 키</span>
+                <span>{spec.laneLabel(activeLanes[index] ?? index, config)} 키</span>
                 <button
                   type="button"
                   className={`key-value-button${keyCaptureTarget === index ? " is-capturing" : ""}`}
@@ -877,7 +863,7 @@ function PracticePageContent() {
             ))}
           </div>
 
-          <p className={`inline-note${hasDuplicateBindings ? " is-danger" : ""}`}>{hasDuplicateBindings ? "같은 키를 중복 바인딩하면 입력 레인이 충돌할 수 있어요." : spec.settingsSummary(config)}</p>
+          {hasDuplicateBindings ? <p className="inline-note is-danger">같은 키를 중복 바인딩하면 입력 레인이 충돌할 수 있어요.</p> : null}
 
           <div className="practice-actions-row">
             {gameState !== "playing" ? (
@@ -920,7 +906,8 @@ function PracticePageContent() {
 
               {laneIndexes.map((lane) => {
                 const laneNotes = notes.filter((note) => note.lane === lane);
-                const laneKey = config.keyBindings[lane] ?? null;
+                const keyIndex = activeLanes.indexOf(lane);
+                const laneKey = keyIndex >= 0 ? (config.keyBindings[keyIndex] ?? null) : null;
                 const isActiveLane = activeLanes.includes(lane);
 
                 return (
@@ -936,7 +923,7 @@ function PracticePageContent() {
                       {laneJudgmentFeedbacks
                         .filter((feedback) => feedback.lane === lane)
                         .map((feedback) => (
-                          <div key={feedback.id} className={`practice-lane-feedback is-${feedback.judgment}`} aria-live="off">
+                          <div key={feedback.id} className={`practice-lane-feedback is-${feedback.judgment}`} data-lane={lane} aria-live="off">
                             <strong>{feedback.judgment.toUpperCase()}</strong>
                             <span>{feedback.signedMs}</span>
                             <small>{feedback.timingLabel}</small>
@@ -967,13 +954,11 @@ function PracticePageContent() {
               <div className="practice-judgment-line" style={{ top: `${JUDGMENT_LINE_Y}px` }} />
             </div>
 
-            <div className="practice-rail-help">
-              {gameState === "playing"
-                ? leadInRemaining > 0
-                  ? <span>시작 준비... {leadInRemaining}</span>
-                  : <span>{spec.helpPlaying(config)}</span>
-                : <span>{typeof spec.helpIdle === "function" ? spec.helpIdle(config) : spec.helpIdle}</span>}
-            </div>
+            {gameState === "playing" && leadInRemaining > 0 ? (
+              <div className="practice-rail-help">
+                <span>시작 준비... {leadInRemaining}</span>
+              </div>
+            ) : null}
           </article>
 
           <aside className="panel practice-stats-panel">
@@ -1018,12 +1003,6 @@ function PracticePageContent() {
               </div>
             </div>
 
-            <div className="practice-next-box">
-              <span className="key-label">다음 입력</span>
-              <strong>{formatKeyLabel(config.keyBindings[nextExpectedLane] ?? config.keyBindings[0] ?? "-")}</strong>
-              <small>{spec.laneLabel(nextExpectedLane, config)}</small>
-            </div>
-
             <div className="practice-judgment-number-grid">
               <article className="practice-judgment-number-card is-perfect">
                 <span>PERFECT</span>
@@ -1043,22 +1022,62 @@ function PracticePageContent() {
               </article>
             </div>
 
-            <div className={`practice-judgment-toast${lastFeedback ? ` is-${lastFeedback.tone}` : ""}`}>
-              <span className="practice-judgment-toast-label">LAST</span>
-              <strong>{lastFeedback?.label ?? "READY"}</strong>
-              <small>{remainingNotes > 0 ? `남은 노트 ${remainingNotes}` : "모든 노트 판정 완료"}</small>
-            </div>
-
-            {gameState === "ended" ? (
-              <div className="practice-end-box">
-                <h3>연습 종료</h3>
-                <p>
-                  최대 콤보 <strong>{stats.maxCombo}</strong> · 정확도 <strong>{accuracy.toFixed(1)}%</strong>
-                </p>
-              </div>
-            ) : null}
           </aside>
         </section>
+
+        {gameState !== "idle" ? (
+          <article className="panel practice-timing-graph-card">
+            <div>
+              <p className="section-label">TIMING DEVIATION</p>
+              <h2 className="section-title">타이밍 편차 그래프</h2>
+            </div>
+            <div className="practice-timing-graph-wrap">
+              <svg viewBox={`0 0 800 200`} preserveAspectRatio="none" className="practice-timing-svg">
+                <rect x="0" y={200 / 2 - (GOOD_WINDOW_MS / MISS_WINDOW_MS) * (200 / 2)} width="800" height={(GOOD_WINDOW_MS / MISS_WINDOW_MS) * 200} fill="rgba(57, 197, 187, 0.06)" />
+                <rect x="0" y={200 / 2 - (PERFECT_WINDOW_MS / MISS_WINDOW_MS) * (200 / 2)} width="800" height={(PERFECT_WINDOW_MS / MISS_WINDOW_MS) * 200} fill="rgba(255, 226, 122, 0.08)" />
+                <line x1="0" y1="100" x2="800" y2="100" stroke="rgba(236, 254, 255, 0.25)" strokeWidth="1" strokeDasharray="6 4" />
+                <line x1="0" y1={200 / 2 - (PERFECT_WINDOW_MS / MISS_WINDOW_MS) * (200 / 2)} x2="800" y2={200 / 2 - (PERFECT_WINDOW_MS / MISS_WINDOW_MS) * (200 / 2)} stroke="rgba(255, 226, 122, 0.2)" strokeWidth="0.5" />
+                <line x1="0" y1={200 / 2 + (PERFECT_WINDOW_MS / MISS_WINDOW_MS) * (200 / 2)} x2="800" y2={200 / 2 + (PERFECT_WINDOW_MS / MISS_WINDOW_MS) * (200 / 2)} stroke="rgba(255, 226, 122, 0.2)" strokeWidth="0.5" />
+                <line x1="0" y1={200 / 2 - (GOOD_WINDOW_MS / MISS_WINDOW_MS) * (200 / 2)} x2="800" y2={200 / 2 - (GOOD_WINDOW_MS / MISS_WINDOW_MS) * (200 / 2)} stroke="rgba(57, 197, 187, 0.2)" strokeWidth="0.5" />
+                <line x1="0" y1={200 / 2 + (GOOD_WINDOW_MS / MISS_WINDOW_MS) * (200 / 2)} x2="800" y2={200 / 2 + (GOOD_WINDOW_MS / MISS_WINDOW_MS) * (200 / 2)} stroke="rgba(57, 197, 187, 0.2)" strokeWidth="0.5" />
+                {timingHistory.length > 1 ? (
+                  <polyline
+                    fill="none"
+                    stroke="rgba(236, 254, 255, 0.15)"
+                    strokeWidth="1"
+                    points={timingHistory.map((point, index) => {
+                      const x = (index / Math.max(timingHistory.length - 1, 1)) * 800;
+                      const y = 100 + (point.deltaMs / MISS_WINDOW_MS) * 100;
+                      return `${x},${Math.max(0, Math.min(200, y))}`;
+                    }).join(" ")}
+                  />
+                ) : null}
+                {timingHistory.map((point, index) => {
+                  const x = timingHistory.length === 1 ? 400 : (index / (timingHistory.length - 1)) * 800;
+                  const y = 100 + (point.deltaMs / MISS_WINDOW_MS) * 100;
+                  const clampedY = Math.max(4, Math.min(196, y));
+                  const color = point.judgment === "perfect" ? "#ffe27a" : point.judgment === "good" ? "#64f5e7" : "#ff7a90";
+                  return <circle key={point.id} cx={x} cy={clampedY} r="3.5" fill={color} opacity="0.85" />;
+                })}
+              </svg>
+              <div className="practice-timing-graph-labels">
+                <span className="practice-timing-label-fast">FAST −{MISS_WINDOW_MS}ms</span>
+                <span className="practice-timing-label-zero">0ms</span>
+                <span className="practice-timing-label-slow">SLOW +{MISS_WINDOW_MS}ms</span>
+              </div>
+              <div className="practice-timing-legend">
+                <span className="practice-timing-legend-item"><span className="practice-timing-dot is-perfect" />PERFECT ±{PERFECT_WINDOW_MS}ms</span>
+                <span className="practice-timing-legend-item"><span className="practice-timing-dot is-good" />GOOD ±{GOOD_WINDOW_MS}ms</span>
+                <span className="practice-timing-legend-item"><span className="practice-timing-dot is-miss" />MISS</span>
+                {timingHistory.length > 0 ? (
+                  <span className="practice-timing-avg">
+                    AVG {timingHistory.length > 0 ? (timingHistory.reduce((sum, p) => sum + p.deltaMs, 0) / timingHistory.length).toFixed(1) : "0"}ms
+                  </span>
+                ) : null}
+              </div>
+            </div>
+          </article>
+        ) : null}
       </section>
 
       <style jsx>{`
@@ -1116,12 +1135,6 @@ function PracticePageContent() {
           color: var(--muted);
           font-size: 13px;
           font-weight: 700;
-        }
-
-        .practice-field-hint {
-          color: var(--muted);
-          font-size: 11px;
-          line-height: 1.45;
         }
 
         .practice-input,
@@ -1264,7 +1277,7 @@ function PracticePageContent() {
           position: absolute;
           left: 0;
           right: 0;
-          bottom: ${LANE_FEEDBACK_GAP_PX}px;
+          bottom: 12px;
           display: grid;
           gap: 3px;
           justify-items: center;
@@ -1275,17 +1288,20 @@ function PracticePageContent() {
           background: rgba(5, 16, 22, 0.84);
           pointer-events: none;
           z-index: 5;
-          animation: lane-feedback-rise ${LANE_FEEDBACK_DURATION_MS}ms ease-out forwards;
+          animation-name: lane-feedback-rise;
+          animation-duration: ${LANE_FEEDBACK_DURATION_MS}ms;
+          animation-timing-function: ease-out;
+          animation-fill-mode: forwards;
         }
 
         .practice-lane-feedback strong {
-          font-size: 13px;
+          font-size: 15px;
           line-height: 1;
-          letter-spacing: 0.05em;
+          letter-spacing: 0.06em;
         }
 
         .practice-lane-feedback span {
-          font-size: 16px;
+          font-size: 18px;
           font-weight: 800;
           line-height: 1;
         }
@@ -1306,6 +1322,12 @@ function PracticePageContent() {
           color: var(--accent-strong);
           border-color: rgba(100, 245, 231, 0.45);
           box-shadow: 0 8px 24px rgba(100, 245, 231, 0.18);
+        }
+
+        .practice-lane-feedback.is-miss {
+          color: var(--danger);
+          border-color: rgba(255, 122, 144, 0.45);
+          box-shadow: 0 8px 24px rgba(255, 122, 144, 0.16);
         }
 
         .practice-key-floor {
@@ -1452,31 +1474,20 @@ function PracticePageContent() {
           line-height: 1.6;
         }
 
-        .practice-summary-box,
-        .practice-next-box,
-        .practice-end-box {
+        .practice-summary-box {
           border-radius: 18px;
           border: 1px solid var(--line);
           background: rgba(255, 255, 255, 0.03);
           padding: 14px;
           display: grid;
           gap: 10px;
-        }
-
-        .practice-summary-box {
           grid-template-columns: repeat(2, minmax(0, 1fr));
         }
 
-        .practice-next-box strong,
-        .practice-summary-box strong,
-        .practice-end-box strong {
+        .practice-summary-box strong {
           display: block;
           margin-top: 4px;
           font-size: 1.15rem;
-        }
-
-        .practice-next-box small {
-          color: var(--muted);
         }
 
         .practice-judgment-number-grid {
@@ -1523,58 +1534,84 @@ function PracticePageContent() {
           font-size: 1.2rem;
         }
 
-        .practice-judgment-toast {
-          border-radius: 18px;
-          padding: 16px;
-          text-align: center;
-          background: rgba(255, 255, 255, 0.04);
-          border: 1px solid var(--line);
-          color: var(--muted);
+        .practice-timing-graph-card {
           display: grid;
-          gap: 6px;
+          gap: 14px;
         }
 
-        .practice-judgment-toast-label {
+        .practice-timing-graph-wrap {
+          display: grid;
+          gap: 8px;
+        }
+
+        .practice-timing-svg {
+          width: 100%;
+          height: 180px;
+          border-radius: 12px;
+          border: 1px solid var(--line);
+          background: rgba(255, 255, 255, 0.02);
+        }
+
+        .practice-timing-graph-labels {
+          display: flex;
+          justify-content: space-between;
           font-size: 11px;
-          font-weight: 800;
-          letter-spacing: 0.12em;
+          font-weight: 700;
+          letter-spacing: 0.06em;
           color: var(--muted);
         }
 
-        .practice-judgment-toast strong {
-          font-size: 1.5rem;
-          line-height: 1;
-          letter-spacing: 0.08em;
-        }
-
-        .practice-judgment-toast small {
-          font-size: 12px;
-          color: var(--muted);
-        }
-
-        .practice-judgment-toast.is-perfect {
-          color: #ffe27a;
-          border-color: rgba(255, 226, 122, 0.45);
-        }
-
-        .practice-judgment-toast.is-good {
+        .practice-timing-label-fast {
           color: var(--accent-strong);
-          border-color: rgba(100, 245, 231, 0.45);
         }
 
-        .practice-judgment-toast.is-miss {
+        .practice-timing-label-zero {
+          color: var(--text);
+        }
+
+        .practice-timing-label-slow {
           color: var(--danger);
-          border-color: rgba(255, 122, 144, 0.4);
         }
 
-        .practice-judgment-toast.is-early {
-          color: #d9dcff;
-          border-color: rgba(169, 178, 255, 0.35);
+        .practice-timing-legend {
+          display: flex;
+          gap: 16px;
+          flex-wrap: wrap;
+          align-items: center;
+          font-size: 11px;
+          font-weight: 700;
+          letter-spacing: 0.06em;
+          color: var(--muted);
         }
 
-        .practice-judgment-toast.is-wrong {
-          color: #ffb86b;
-          border-color: rgba(255, 184, 107, 0.38);
+        .practice-timing-legend-item {
+          display: flex;
+          align-items: center;
+          gap: 5px;
+        }
+
+        .practice-timing-dot {
+          width: 8px;
+          height: 8px;
+          border-radius: 50%;
+        }
+
+        .practice-timing-dot.is-perfect {
+          background: #ffe27a;
+        }
+
+        .practice-timing-dot.is-good {
+          background: var(--accent-strong);
+        }
+
+        .practice-timing-dot.is-miss {
+          background: var(--danger);
+        }
+
+        .practice-timing-avg {
+          margin-left: auto;
+          color: var(--text);
+          font-size: 13px;
         }
 
         @media (max-width: 980px) {

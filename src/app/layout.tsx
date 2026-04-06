@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import packageJson from "../../package.json";
 import Link from "next/link";
 import Script from "next/script";
-import { Suspense } from "react";
 import { HeaderNav } from "./components/header-nav";
-import { PatternSwitcher } from "./components/pattern-switcher";
+import { ThemeToggle } from "./components/theme-toggle";
+import { ContactButton } from "./components/contact-modal";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -17,7 +17,15 @@ const APP_VERSION = packageJson.version;
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="ko">
+    <html lang="ko" suppressHydrationWarning>
+      <head>
+        <link rel="stylesheet" as="style" crossOrigin="anonymous" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var t=localStorage.getItem('trill-theme');if(t==='dark'||t==='light'){document.documentElement.dataset.theme=t}}catch(e){}})()`,
+          }}
+        />
+      </head>
       <body>
         <Script id="gtm-base" strategy="afterInteractive">
           {`
@@ -38,16 +46,15 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         </noscript>
         <header className="site-header">
           <div className="site-shell site-header-inner">
-            <div className="site-header-brand-row">
-              <Link href="/" className="brand">
-                <span className="brand-mark">TRILL LAB</span>
-                <strong>Trill practice studio</strong>
-              </Link>
-              <Suspense fallback={null}>
-                <PatternSwitcher />
-              </Suspense>
-            </div>
+            <Link href="/" className="brand">
+              <span className="brand-mark">TRILL LAB</span>
+              <span className="brand-version">v{APP_VERSION}</span>
+            </Link>
             <HeaderNav />
+            <div className="header-actions">
+              <ContactButton />
+              <ThemeToggle />
+            </div>
           </div>
         </header>
         <div className="site-shell">{children}</div>

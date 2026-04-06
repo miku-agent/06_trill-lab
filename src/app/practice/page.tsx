@@ -368,10 +368,32 @@ function PracticePageContent() {
   const laneFeedbackIdRef = useRef(0);
   const controlledElapsedMsRef = useRef<number | null>(null);
 
+  const stopLoop = useCallback(() => {
+    if (rafRef.current !== null) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
+  }, []);
+
   useEffect(() => {
+    stopLoop();
+    if (lastJudgmentTimeoutRef.current !== null) {
+      window.clearTimeout(lastJudgmentTimeoutRef.current);
+      lastJudgmentTimeoutRef.current = null;
+    }
     notesRef.current = [];
     controlledElapsedMsRef.current = null;
-  }, [pattern]);
+    setConfig(getInitialConfig(pattern));
+    setGameState("idle");
+    setNotes([]);
+    setElapsedMs(0);
+    setLastFeedback(null);
+    setHitEffects([]);
+    setLanePressEffects([]);
+    setLaneJudgmentFeedbacks([]);
+    setKeyCaptureTarget(null);
+    setStats({ combo: 0, maxCombo: 0, perfect: 0, good: 0, miss: 0, totalNotes: 0 });
+  }, [pattern, stopLoop]);
 
   const travelMs = useMemo(() => getTravelMs(config.speed), [config.speed]);
   const beatGuideLines = useMemo(() => createBeatGuideLines(config), [config]);
@@ -380,13 +402,6 @@ function PracticePageContent() {
   const laneIndexes = useMemo(() => Array.from({ length: spec.laneCount }, (_, index) => index), [spec.laneCount]);
   const nextExpectedNote = useMemo(() => notes.find((note) => !note.judged) ?? null, [notes]);
   const nextExpectedLane = nextExpectedNote?.lane ?? sequence[0] ?? 0;
-
-  const stopLoop = useCallback(() => {
-    if (rafRef.current !== null) {
-      cancelAnimationFrame(rafRef.current);
-      rafRef.current = null;
-    }
-  }, []);
 
   const spawnHitEffect = useCallback((lane: number) => {
     const id = hitEffectIdRef.current++;

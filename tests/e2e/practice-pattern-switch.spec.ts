@@ -82,8 +82,8 @@ test.describe("패턴 전환 상태 초기화", () => {
     await expect(page.getByLabel("노트 속도")).toHaveValue("6.5");
 
     // trill 기본 키 바인딩 확인: 왼쪽 A, 오른쪽 '
-    await expect(page.getByRole("button", { name: "왼쪽 키" })).toContainText("A");
-    await expect(page.getByRole("button", { name: "오른쪽 키" })).toContainText("'");
+    await expect(page.locator(".practice-field").filter({ hasText: "LANE 1" }).locator("button")).toContainText("A");
+    await expect(page.locator(".practice-field").filter({ hasText: "LANE 2" }).locator("button")).toContainText("'");
 
     // gameState가 idle인지 확인 (이전 druruk playing 상태 잔류 없음)
     await expect(page.getByRole("button", { name: "연습 시작" })).toBeVisible();

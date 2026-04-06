@@ -330,9 +330,15 @@ function getPlayablePattern(input: string | null | undefined): PracticePattern {
 export default function PracticePage() {
   return (
     <Suspense fallback={<main className="page-main" />}>
-      <PracticePageContent />
+      <PracticePageRouter />
     </Suspense>
   );
+}
+
+function PracticePageRouter() {
+  const searchParams = useSearchParams();
+  const pattern = getPlayablePattern(searchParams.get("pattern"));
+  return <PracticePageContent key={pattern} />;
 }
 
 function PracticePageContent() {
@@ -375,25 +381,6 @@ function PracticePageContent() {
     }
   }, []);
 
-  useEffect(() => {
-    stopLoop();
-    if (lastJudgmentTimeoutRef.current !== null) {
-      window.clearTimeout(lastJudgmentTimeoutRef.current);
-      lastJudgmentTimeoutRef.current = null;
-    }
-    notesRef.current = [];
-    controlledElapsedMsRef.current = null;
-    setConfig(getInitialConfig(pattern));
-    setGameState("idle");
-    setNotes([]);
-    setElapsedMs(0);
-    setLastFeedback(null);
-    setHitEffects([]);
-    setLanePressEffects([]);
-    setLaneJudgmentFeedbacks([]);
-    setKeyCaptureTarget(null);
-    setStats({ combo: 0, maxCombo: 0, perfect: 0, good: 0, miss: 0, totalNotes: 0 });
-  }, [pattern, stopLoop]);
 
   const travelMs = useMemo(() => getTravelMs(config.speed), [config.speed]);
   const beatGuideLines = useMemo(() => createBeatGuideLines(config), [config]);
@@ -951,7 +938,7 @@ function PracticePageContent() {
                       {laneJudgmentFeedbacks
                         .filter((feedback) => feedback.lane === lane)
                         .map((feedback) => (
-                          <div key={feedback.id} className={`practice-lane-feedback is-${feedback.judgment}`} aria-live="off">
+                          <div key={feedback.id} className={`practice-lane-feedback is-${feedback.judgment}`} data-lane={lane} aria-live="off">
                             <strong>{feedback.judgment.toUpperCase()}</strong>
                             <span>{feedback.signedMs}</span>
                             <small>{feedback.timingLabel}</small>

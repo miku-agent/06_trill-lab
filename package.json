@@ -1,6 +1,6 @@
 {
   "name": "trill-lab",
-  "version": "0.1.4",
+  "version": "0.1.6",
   "private": true,
   "packageManager": "pnpm@10.30.3",
   "scripts": {
@@ -10,7 +10,8 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test:e2e": "playwright test",
-    "test:e2e:headed": "playwright test --headed"
+    "test:e2e:headed": "playwright test --headed",
+    "prepare": "husky"
   },
   "dependencies": {
     "next": "16.1.6",
@@ -24,6 +25,7 @@
     "@types/react-dom": "^19.2.2",
     "eslint": "^9.38.0",
     "eslint-config-next": "16.1.6",
+    "husky": "^9.1.7",
     "typescript": "^5.9.3"
   }
 }

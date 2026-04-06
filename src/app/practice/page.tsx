@@ -369,9 +369,19 @@ function PracticePageContent() {
   const controlledElapsedMsRef = useRef<number | null>(null);
 
   useEffect(() => {
+    stopLoop();
     notesRef.current = [];
     controlledElapsedMsRef.current = null;
-  }, [pattern]);
+    setConfig(getInitialConfig(pattern));
+    setGameState("idle");
+    setNotes([]);
+    setElapsedMs(0);
+    setLastFeedback(null);
+    setHitEffects([]);
+    setLanePressEffects([]);
+    setLaneJudgmentFeedbacks([]);
+    setStats({ combo: 0, maxCombo: 0, perfect: 0, good: 0, miss: 0, totalNotes: 0 });
+  }, [pattern, stopLoop]);
 
   const travelMs = useMemo(() => getTravelMs(config.speed), [config.speed]);
   const beatGuideLines = useMemo(() => createBeatGuideLines(config), [config]);

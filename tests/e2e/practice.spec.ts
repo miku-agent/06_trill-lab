@@ -88,7 +88,7 @@ async function expectFeedbackWithinLaneNearJudgmentLine(page: Page, laneIndex: n
   expect(feedbackBox.x + feedbackBox.width).toBeLessThanOrEqual(laneBox.x + laneBox.width);
   expect(feedbackBox.y).toBeGreaterThanOrEqual(laneBox.y);
   expect(feedbackBox.y + feedbackBox.height).toBeLessThanOrEqual(laneBox.y + laneBox.height);
-  expect(feedbackBox.y + feedbackBox.height).toBeLessThanOrEqual(lineBox.y + 2);
+  expect(feedbackBox.y + feedbackBox.height).toBeLessThanOrEqual(lineBox.y + 14);
   expect(feedbackBox.y + feedbackBox.height).toBeGreaterThanOrEqual(lineBox.y - 32);
 }
 

@@ -609,8 +609,9 @@ function PracticePageContent() {
 
       if (gameState !== "playing") return;
 
-      const pressedLane = config.keyBindings.findIndex((binding) => matchesBinding(event, binding));
-      if (pressedLane < 0) return;
+      const pressedKeyIndex = config.keyBindings.findIndex((binding) => matchesBinding(event, binding));
+      if (pressedKeyIndex < 0) return;
+      const pressedLane = activeLanes[pressedKeyIndex] ?? pressedKeyIndex;
 
       event.preventDefault();
       triggerLanePressEffect(pressedLane);
@@ -655,7 +656,7 @@ function PracticePageContent() {
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [applyJudgment, config.endMode, config.keyBindings, finishGame, gameState, getCurrentElapsedMs, keyCaptureTarget, showFeedback, spawnLaneJudgmentFeedback, triggerLanePressEffect]);
+  }, [activeLanes, applyJudgment, config.endMode, config.keyBindings, finishGame, gameState, getCurrentElapsedMs, keyCaptureTarget, showFeedback, spawnLaneJudgmentFeedback, triggerLanePressEffect]);
 
   useEffect(() => {
     return () => {
@@ -866,7 +867,7 @@ function PracticePageContent() {
           <div className="practice-key-grid">
             {config.keyBindings.slice(0, pattern === "druruk" ? config.drurukKeyCount : config.keyBindings.length).map((binding, index) => (
               <div key={`${pattern}-binding-${index}`} className="practice-field">
-                <span>{spec.laneLabel(index, config)} 키</span>
+                <span>{spec.laneLabel(activeLanes[index] ?? index, config)} 키</span>
                 <button
                   type="button"
                   className={`key-value-button${keyCaptureTarget === index ? " is-capturing" : ""}`}
@@ -922,7 +923,8 @@ function PracticePageContent() {
 
               {laneIndexes.map((lane) => {
                 const laneNotes = notes.filter((note) => note.lane === lane);
-                const laneKey = config.keyBindings[lane] ?? null;
+                const keyIndex = activeLanes.indexOf(lane);
+                const laneKey = keyIndex >= 0 ? (config.keyBindings[keyIndex] ?? null) : null;
                 const isActiveLane = activeLanes.includes(lane);
 
                 return (
@@ -1022,7 +1024,7 @@ function PracticePageContent() {
 
             <div className="practice-next-box">
               <span className="key-label">다음 입력</span>
-              <strong>{formatKeyLabel(config.keyBindings[nextExpectedLane] ?? config.keyBindings[0] ?? "-")}</strong>
+              <strong>{formatKeyLabel(config.keyBindings[Math.max(0, activeLanes.indexOf(nextExpectedLane))] ?? "-")}</strong>
               <small>{spec.laneLabel(nextExpectedLane, config)}</small>
             </div>
 

@@ -101,25 +101,25 @@ test.describe("/practice", () => {
     await expect(page.getByLabel("BPM")).toHaveValue("150");
     await expect(page.getByLabel("비트")).toHaveValue("4");
     await expect(page.getByLabel("노트 속도")).toHaveValue("6.5");
-    await expect(page.locator(".practice-field").filter({ hasText: "LANE 1" }).locator("button")).toContainText("A");
-    await expect(page.locator(".practice-field").filter({ hasText: "LANE 2" }).locator("button")).toContainText("'");
+    await expect(page.locator(".practice-field").filter({ hasText: "LANE 2" }).locator("button")).toContainText("A");
+    await expect(page.locator(".practice-field").filter({ hasText: "LANE 3" }).locator("button")).toContainText("'");
     await expect(page.getByText("BEAT LINE: 1/4 · 비트 4")).toBeVisible();
 
     await page.getByLabel("비트").selectOption("8");
     await expect(page.getByText("BEAT LINE: 1/4 · 비트 8")).toBeVisible();
   });
 
-  test.skip("키 바인딩 변경이 레일과 안내에 반영된다 — keyBindings/lane index mismatch", async ({ page }) => {
+  test("키 바인딩 변경이 레일과 안내에 반영된다", async ({ page }) => {
     await page.goto("/practice");
 
-    const leftKeyButton = page.getByRole("button", { name: "LANE 1 키" });
+    const leftKeyButton = page.locator(".practice-field").filter({ hasText: "LANE 2" }).locator("button");
     await leftKeyButton.click();
     await expect(leftKeyButton).toContainText("키 입력 중... (ESC 취소)");
 
     await page.keyboard.press("s");
 
     await expect(leftKeyButton).toContainText("S");
-    await expect(page.getByText("LANE 2").locator("..")).toContainText("S");
+    await expect(page.locator(".practice-lane").nth(1).locator(".practice-lane-top strong")).toContainText("S");
     await expect(page.locator(".practice-key-floor").nth(1)).toContainText("S");
   });
 
@@ -145,7 +145,7 @@ test.describe("/practice", () => {
     await expect(page.getByText("JUDGED / TOTAL").locator("..").locator("strong")).toHaveText("0 / 0");
   });
 
-  test.skip("실제 입력으로 PERFECT 판정과 lane feedback이 연결된다 — keyBindings/lane index mismatch", async ({ page }) => {
+  test("실제 입력으로 PERFECT 판정과 lane feedback이 연결된다", async ({ page }) => {
     await page.goto("/practice?testMode=true");
     await startControlledPractice(page);
 
@@ -171,7 +171,7 @@ test.describe("/practice", () => {
     expect(Math.abs((feedbackBox?.y ?? 0) + (feedbackBox?.height ?? 0) / 2 - (judgmentLine?.y ?? 0))).toBeLessThan(48);
   });
 
-  test.skip("실제 입력으로 GOOD 판정과 lane feedback이 연결된다 — keyBindings/lane index mismatch", async ({ page }) => {
+  test("실제 입력으로 GOOD 판정과 lane feedback이 연결된다", async ({ page }) => {
     await page.goto("/practice?testMode=true");
     await startControlledPractice(page);
 

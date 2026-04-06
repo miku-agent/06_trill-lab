@@ -51,6 +51,12 @@ type LaneJudgmentFeedback = {
   timingLabel: "FAST" | "SLOW";
 };
 
+type TimingPoint = {
+  id: number;
+  deltaMs: number;
+  judgment: JudgmentType;
+};
+
 type PracticeTestApi = {
   startControlledGame: (partialConfig?: Partial<GameConfig>) => void;
   setElapsedMs: (nextElapsedMs: number) => void;
@@ -345,6 +351,8 @@ function PracticePageContent() {
   const hitEffectIdRef = useRef(0);
   const laneFeedbackIdRef = useRef(0);
   const controlledElapsedMsRef = useRef<number | null>(null);
+  const timingHistoryRef = useRef<TimingPoint[]>([]);
+  const [timingHistory, setTimingHistory] = useState<TimingPoint[]>([]);
 
   const stopLoop = useCallback(() => {
     if (rafRef.current !== null) {
@@ -386,6 +394,10 @@ function PracticePageContent() {
     const timingLabel: "FAST" | "SLOW" = deltaMs < 0 ? "FAST" : "SLOW";
 
     setLaneJudgmentFeedbacks((prev) => [...prev.filter((feedback) => feedback.lane !== lane), { id, lane, judgment, signedMs, timingLabel }]);
+
+    const point: TimingPoint = { id, deltaMs, judgment };
+    timingHistoryRef.current = [...timingHistoryRef.current, point];
+    setTimingHistory(timingHistoryRef.current);
 
     window.setTimeout(() => {
       setLaneJudgmentFeedbacks((prev) => prev.filter((feedback) => feedback.id !== id));
@@ -466,9 +478,14 @@ function PracticePageContent() {
 
     const staleMisses = notesRef.current.filter((note) => !note.judged && nextElapsedMs - note.time > MISS_WINDOW_MS);
 
-    staleMisses.forEach((note) => {
-      applyJudgment(note.id, "miss", note.lane);
-    });
+    if (staleMisses.length > 0) {
+      staleMisses.forEach((note) => {
+        applyJudgment(note.id, "miss", note.lane);
+        const point: TimingPoint = { id: note.id, deltaMs: MISS_WINDOW_MS, judgment: "miss" };
+        timingHistoryRef.current = [...timingHistoryRef.current, point];
+      });
+      setTimingHistory(timingHistoryRef.current);
+    }
   }, [applyJudgment]);
 
   const startGame = useCallback(() => {
@@ -481,6 +498,8 @@ function PracticePageContent() {
     setHitEffects([]);
     setLanePressEffects([]);
     setLaneJudgmentFeedbacks([]);
+    timingHistoryRef.current = [];
+    setTimingHistory([]);
     setGameState("playing");
     controlledElapsedMsRef.current = null;
     startAtRef.current = performance.now();
@@ -496,6 +515,8 @@ function PracticePageContent() {
     setHitEffects([]);
     setLanePressEffects([]);
     setLaneJudgmentFeedbacks([]);
+    timingHistoryRef.current = [];
+    setTimingHistory([]);
     setStats({ combo: 0, maxCombo: 0, perfect: 0, good: 0, miss: 0, totalNotes: 0 });
     controlledElapsedMsRef.current = null;
     setGameState("idle");
@@ -522,7 +543,10 @@ function PracticePageContent() {
       if (staleMisses.length > 0) {
         staleMisses.forEach((note) => {
           applyJudgment(note.id, "miss", note.lane);
+          const point: TimingPoint = { id: note.id, deltaMs: MISS_WINDOW_MS, judgment: "miss" };
+          timingHistoryRef.current = [...timingHistoryRef.current, point];
         });
+        setTimingHistory(timingHistoryRef.current);
 
         if (config.endMode === "firstMiss") {
           finishGame();
@@ -976,16 +1000,62 @@ function PracticePageContent() {
               </article>
             </div>
 
-            {gameState === "ended" ? (
-              <div className="practice-end-box">
-                <h3>연습 종료</h3>
-                <p>
-                  최대 콤보 <strong>{stats.maxCombo}</strong> · 정확도 <strong>{accuracy.toFixed(1)}%</strong>
-                </p>
-              </div>
-            ) : null}
           </aside>
         </section>
+
+        {gameState !== "idle" ? (
+          <article className="panel practice-timing-graph-card">
+            <div>
+              <p className="section-label">TIMING DEVIATION</p>
+              <h2 className="section-title">타이밍 편차 그래프</h2>
+            </div>
+            <div className="practice-timing-graph-wrap">
+              <svg viewBox={`0 0 800 200`} preserveAspectRatio="none" className="practice-timing-svg">
+                <rect x="0" y={200 / 2 - (GOOD_WINDOW_MS / MISS_WINDOW_MS) * (200 / 2)} width="800" height={(GOOD_WINDOW_MS / MISS_WINDOW_MS) * 200} fill="rgba(57, 197, 187, 0.06)" />
+                <rect x="0" y={200 / 2 - (PERFECT_WINDOW_MS / MISS_WINDOW_MS) * (200 / 2)} width="800" height={(PERFECT_WINDOW_MS / MISS_WINDOW_MS) * 200} fill="rgba(255, 226, 122, 0.08)" />
+                <line x1="0" y1="100" x2="800" y2="100" stroke="rgba(236, 254, 255, 0.25)" strokeWidth="1" strokeDasharray="6 4" />
+                <line x1="0" y1={200 / 2 - (PERFECT_WINDOW_MS / MISS_WINDOW_MS) * (200 / 2)} x2="800" y2={200 / 2 - (PERFECT_WINDOW_MS / MISS_WINDOW_MS) * (200 / 2)} stroke="rgba(255, 226, 122, 0.2)" strokeWidth="0.5" />
+                <line x1="0" y1={200 / 2 + (PERFECT_WINDOW_MS / MISS_WINDOW_MS) * (200 / 2)} x2="800" y2={200 / 2 + (PERFECT_WINDOW_MS / MISS_WINDOW_MS) * (200 / 2)} stroke="rgba(255, 226, 122, 0.2)" strokeWidth="0.5" />
+                <line x1="0" y1={200 / 2 - (GOOD_WINDOW_MS / MISS_WINDOW_MS) * (200 / 2)} x2="800" y2={200 / 2 - (GOOD_WINDOW_MS / MISS_WINDOW_MS) * (200 / 2)} stroke="rgba(57, 197, 187, 0.2)" strokeWidth="0.5" />
+                <line x1="0" y1={200 / 2 + (GOOD_WINDOW_MS / MISS_WINDOW_MS) * (200 / 2)} x2="800" y2={200 / 2 + (GOOD_WINDOW_MS / MISS_WINDOW_MS) * (200 / 2)} stroke="rgba(57, 197, 187, 0.2)" strokeWidth="0.5" />
+                {timingHistory.length > 1 ? (
+                  <polyline
+                    fill="none"
+                    stroke="rgba(236, 254, 255, 0.15)"
+                    strokeWidth="1"
+                    points={timingHistory.map((point, index) => {
+                      const x = (index / Math.max(timingHistory.length - 1, 1)) * 800;
+                      const y = 100 + (point.deltaMs / MISS_WINDOW_MS) * 100;
+                      return `${x},${Math.max(0, Math.min(200, y))}`;
+                    }).join(" ")}
+                  />
+                ) : null}
+                {timingHistory.map((point, index) => {
+                  const x = timingHistory.length === 1 ? 400 : (index / (timingHistory.length - 1)) * 800;
+                  const y = 100 + (point.deltaMs / MISS_WINDOW_MS) * 100;
+                  const clampedY = Math.max(4, Math.min(196, y));
+                  const color = point.judgment === "perfect" ? "#ffe27a" : point.judgment === "good" ? "#64f5e7" : "#ff7a90";
+                  return <circle key={point.id} cx={x} cy={clampedY} r="3.5" fill={color} opacity="0.85" />;
+                })}
+              </svg>
+              <div className="practice-timing-graph-labels">
+                <span className="practice-timing-label-fast">FAST −{MISS_WINDOW_MS}ms</span>
+                <span className="practice-timing-label-zero">0ms</span>
+                <span className="practice-timing-label-slow">SLOW +{MISS_WINDOW_MS}ms</span>
+              </div>
+              <div className="practice-timing-legend">
+                <span className="practice-timing-legend-item"><span className="practice-timing-dot is-perfect" />PERFECT ±{PERFECT_WINDOW_MS}ms</span>
+                <span className="practice-timing-legend-item"><span className="practice-timing-dot is-good" />GOOD ±{GOOD_WINDOW_MS}ms</span>
+                <span className="practice-timing-legend-item"><span className="practice-timing-dot is-miss" />MISS</span>
+                {timingHistory.length > 0 ? (
+                  <span className="practice-timing-avg">
+                    AVG {timingHistory.length > 0 ? (timingHistory.reduce((sum, p) => sum + p.deltaMs, 0) / timingHistory.length).toFixed(1) : "0"}ms
+                  </span>
+                ) : null}
+              </div>
+            </div>
+          </article>
+        ) : null}
       </section>
 
       <style jsx>{`
@@ -1382,22 +1452,17 @@ function PracticePageContent() {
           line-height: 1.6;
         }
 
-        .practice-summary-box,
-        .practice-end-box {
+        .practice-summary-box {
           border-radius: 18px;
           border: 1px solid var(--line);
           background: rgba(255, 255, 255, 0.03);
           padding: 14px;
           display: grid;
           gap: 10px;
-        }
-
-        .practice-summary-box {
           grid-template-columns: repeat(2, minmax(0, 1fr));
         }
 
-        .practice-summary-box strong,
-        .practice-end-box strong {
+        .practice-summary-box strong {
           display: block;
           margin-top: 4px;
           font-size: 1.15rem;
@@ -1447,6 +1512,85 @@ function PracticePageContent() {
           font-size: 1.2rem;
         }
 
+        .practice-timing-graph-card {
+          display: grid;
+          gap: 14px;
+        }
+
+        .practice-timing-graph-wrap {
+          display: grid;
+          gap: 8px;
+        }
+
+        .practice-timing-svg {
+          width: 100%;
+          height: 180px;
+          border-radius: 12px;
+          border: 1px solid var(--line);
+          background: rgba(255, 255, 255, 0.02);
+        }
+
+        .practice-timing-graph-labels {
+          display: flex;
+          justify-content: space-between;
+          font-size: 11px;
+          font-weight: 700;
+          letter-spacing: 0.06em;
+          color: var(--muted);
+        }
+
+        .practice-timing-label-fast {
+          color: var(--accent-strong);
+        }
+
+        .practice-timing-label-zero {
+          color: var(--text);
+        }
+
+        .practice-timing-label-slow {
+          color: var(--danger);
+        }
+
+        .practice-timing-legend {
+          display: flex;
+          gap: 16px;
+          flex-wrap: wrap;
+          align-items: center;
+          font-size: 11px;
+          font-weight: 700;
+          letter-spacing: 0.06em;
+          color: var(--muted);
+        }
+
+        .practice-timing-legend-item {
+          display: flex;
+          align-items: center;
+          gap: 5px;
+        }
+
+        .practice-timing-dot {
+          width: 8px;
+          height: 8px;
+          border-radius: 50%;
+        }
+
+        .practice-timing-dot.is-perfect {
+          background: #ffe27a;
+        }
+
+        .practice-timing-dot.is-good {
+          background: var(--accent-strong);
+        }
+
+        .practice-timing-dot.is-miss {
+          background: var(--danger);
+        }
+
+        .practice-timing-avg {
+          margin-left: auto;
+          color: var(--text);
+          font-size: 13px;
+        }
 
         @media (max-width: 980px) {
           .practice-play-grid {

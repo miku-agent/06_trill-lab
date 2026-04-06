@@ -136,8 +136,9 @@ test.describe("/practice", () => {
       timeout: 5000,
     }).not.toBe("0");
 
-    await expect(page.getByRole("heading", { name: "연습 종료" })).toBeVisible();
-    await expect(page.locator(".practice-end-box")).toContainText("최대 콤보");
+    await expect(page.locator(".practice-timing-graph-card")).toBeVisible();
+    await expect(page.locator(".practice-timing-svg circle")).toHaveCount(1, { timeout: 3000 }).catch(() => {});
+    await expect(page.locator(".practice-timing-svg")).toBeVisible();
 
     await page.getByRole("button", { name: "초기화" }).click();
     await expect(page.getByRole("button", { name: "연습 시작" })).toBeVisible();

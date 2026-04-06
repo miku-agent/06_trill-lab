@@ -407,7 +407,10 @@ function PracticePageContent() {
 
     const point: TimingPoint = { id, deltaMs, judgment };
     timingHistoryRef.current.push(point);
-    setTimingHistory(timingHistoryRef.current.length <= 500 ? [...timingHistoryRef.current] : timingHistoryRef.current.slice(-500));
+    if (timingHistoryRef.current.length > 500) {
+      timingHistoryRef.current = timingHistoryRef.current.slice(-500);
+    }
+    setTimingHistory([...timingHistoryRef.current]);
 
     safeSetTimeout(() => {
       setLaneJudgmentFeedbacks((prev) => prev.filter((feedback) => feedback.id !== id));
@@ -494,7 +497,10 @@ function PracticePageContent() {
         const point: TimingPoint = { id: note.id, deltaMs: MISS_WINDOW_MS, judgment: "miss" };
         timingHistoryRef.current.push(point);
       });
-      setTimingHistory(timingHistoryRef.current.length <= 500 ? [...timingHistoryRef.current] : timingHistoryRef.current.slice(-500));
+      if (timingHistoryRef.current.length > 500) {
+        timingHistoryRef.current = timingHistoryRef.current.slice(-500);
+      }
+      setTimingHistory([...timingHistoryRef.current]);
     }
   }, [applyJudgment]);
 
@@ -556,7 +562,10 @@ function PracticePageContent() {
           const point: TimingPoint = { id: note.id, deltaMs: MISS_WINDOW_MS, judgment: "miss" };
           timingHistoryRef.current.push(point);
         });
-        setTimingHistory(timingHistoryRef.current.length <= 500 ? [...timingHistoryRef.current] : timingHistoryRef.current.slice(-500));
+        if (timingHistoryRef.current.length > 500) {
+          timingHistoryRef.current = timingHistoryRef.current.slice(-500);
+        }
+        setTimingHistory([...timingHistoryRef.current]);
 
         if (config.endMode === "firstMiss") {
           finishGame();

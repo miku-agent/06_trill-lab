@@ -16,7 +16,6 @@
   --card-bg-hover: rgba(255, 255, 255, 0.06);
   --overlay-bg: rgba(7, 19, 26, 0.44);
   --key-value-bg: rgba(7, 19, 26, 0.9);
-  --shadow-color: rgba(0, 0, 0, 0.24);
 }
 
 html[data-theme="light"] {
@@ -37,7 +36,6 @@ html[data-theme="light"] {
   --card-bg-hover: rgba(0, 0, 0, 0.06);
   --overlay-bg: rgba(245, 247, 250, 0.6);
   --key-value-bg: rgba(255, 255, 255, 0.9);
-  --shadow-color: rgba(0, 0, 0, 0.08);
 }
 
 @media (prefers-color-scheme: light) {
@@ -59,8 +57,7 @@ html[data-theme="light"] {
     --card-bg-hover: rgba(0, 0, 0, 0.06);
     --overlay-bg: rgba(245, 247, 250, 0.6);
     --key-value-bg: rgba(255, 255, 255, 0.9);
-    --shadow-color: rgba(0, 0, 0, 0.08);
-  }
+    }
 }
 
 * {
@@ -233,7 +230,7 @@ main {
   border: 1px solid var(--line);
   border-radius: 24px;
   padding: 20px;
-  box-shadow: 0 20px 80px var(--shadow-color);
+  box-shadow: none;
 }
 
 .stack-gap-lg {
@@ -432,7 +429,7 @@ main {
 .countdown-value {
   font-size: clamp(5.5rem, 18vw, 10rem);
   line-height: 0.9;
-  text-shadow: 0 0 30px rgba(100, 245, 231, 0.28);
+  text-shadow: none;
 }
 
 .rhythm-panel {
@@ -441,7 +438,7 @@ main {
 
 .rhythm-panel.is-miss {
   border-color: rgba(255, 122, 144, 0.6);
-  box-shadow: 0 0 0 1px rgba(255, 122, 144, 0.18), 0 20px 80px rgba(0, 0, 0, 0.24);
+  box-shadow: none;
 }
 
 .rhythm-stage {
@@ -528,7 +525,7 @@ main {
   border-radius: 22px;
   border: 1px solid var(--line);
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02));
-  transition: transform 120ms ease, border-color 120ms ease, box-shadow 120ms ease, background 120ms ease;
+  transition: transform 120ms ease, border-color 120ms ease, background 120ms ease;
 }
 
 .rhythm-pad.is-compact {
@@ -549,7 +546,7 @@ main {
 
 .rhythm-pad.is-expected {
   border-color: rgba(100, 245, 231, 0.72);
-  box-shadow: inset 0 0 0 1px rgba(100, 245, 231, 0.22), 0 0 0 3px rgba(100, 245, 231, 0.08), 0 10px 32px rgba(57, 197, 187, 0.16);
+  box-shadow: none;
   background: linear-gradient(180deg, rgba(57, 197, 187, 0.12), rgba(255, 255, 255, 0.03));
 }
 
@@ -560,7 +557,7 @@ main {
 .rhythm-pad.is-active {
   transform: scale(1.03);
   border-color: rgba(100, 245, 231, 0.78);
-  box-shadow: 0 0 0 1px rgba(100, 245, 231, 0.18), 0 12px 40px rgba(57, 197, 187, 0.22);
+  box-shadow: none;
   background: linear-gradient(180deg, rgba(57, 197, 187, 0.18), rgba(255, 255, 255, 0.03));
 }
 
@@ -729,7 +726,7 @@ main {
   background: var(--card-bg);
   color: var(--text);
   cursor: pointer;
-  transition: border-color 120ms ease, transform 120ms ease, background 120ms ease, box-shadow 120ms ease;
+  transition: border-color 120ms ease, transform 120ms ease, background 120ms ease;
 }
 
 .trill-group-card:hover,
@@ -742,7 +739,7 @@ main {
 .pattern-select-card.is-active {
   border-color: rgba(100, 245, 231, 0.72);
   background: rgba(57, 197, 187, 0.14);
-  box-shadow: 0 10px 30px rgba(57, 197, 187, 0.12);
+  box-shadow: none;
 }
 
 .trill-group-card-header {
@@ -1000,8 +997,9 @@ main {
 }
 
 .theme-toggle:hover {
-  color: var(--text);
-  background: var(--card-bg-hover);
+  color: var(--accent-strong);
+  border-color: var(--accent);
+  background: rgba(57, 197, 187, 0.1);
 }
 
 .theme-toggle-icon {

@@ -637,10 +637,11 @@ function PracticePageContent() {
   }, [activeLanes, applyJudgment, config.endMode, config.keyBindings, finishGame, gameState, getCurrentElapsedMs, keyCaptureTarget, spawnLaneJudgmentFeedback, triggerLanePressEffect]);
 
   useEffect(() => {
+    const timers = timerIdsRef.current;
     return () => {
       stopLoop();
-      timerIdsRef.current.forEach((id) => clearTimeout(id));
-      timerIdsRef.current.clear();
+      timers.forEach((id) => clearTimeout(id));
+      timers.clear();
     };
   }, [stopLoop]);
 

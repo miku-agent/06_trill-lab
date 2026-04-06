@@ -119,7 +119,7 @@ const DEFAULT_CONFIG: GameConfig = {
   pattern: "trill",
   bpm: 150,
   subdivision: 4,
-  speed: 6.5,
+  speed: 7.5,
   endMode: "timed",
   duration: 30,
   keyBindings: ["a", "'"],

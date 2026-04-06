@@ -76,7 +76,7 @@ test.describe("패턴 전환 상태 초기화", () => {
     await expect(page.getByRole("heading", { name: "트릴 연습 세팅" })).toBeVisible();
     await expect(page.getByLabel("BPM")).toHaveValue("150");
     await expect(page.getByLabel("비트")).toHaveValue("4");
-    await expect(page.getByLabel("노트 속도")).toHaveValue("6.5");
+    await expect(page.getByLabel("노트 속도")).toHaveValue("7.5");
 
     // trill 기본 키 바인딩 확인: 왼쪽 A, 오른쪽 '
     await expect(page.locator(".practice-field").filter({ hasText: "LANE 2" }).locator("button")).toContainText("A");

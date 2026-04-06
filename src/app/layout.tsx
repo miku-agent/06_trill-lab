@@ -3,6 +3,7 @@ import packageJson from "../../package.json";
 import Link from "next/link";
 import Script from "next/script";
 import { HeaderNav } from "./components/header-nav";
+import { ThemeToggle } from "./components/theme-toggle";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -15,7 +16,15 @@ const APP_VERSION = packageJson.version;
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="ko">
+    <html lang="ko" suppressHydrationWarning>
+      <head>
+        <link rel="stylesheet" as="style" crossOrigin="anonymous" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var t=localStorage.getItem('trill-theme');if(t==='dark'||t==='light'){document.documentElement.dataset.theme=t}}catch(e){}})()`,
+          }}
+        />
+      </head>
       <body>
         <Script id="gtm-base" strategy="afterInteractive">
           {`
@@ -41,6 +50,9 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
               <span className="brand-version">v{APP_VERSION}</span>
             </Link>
             <HeaderNav />
+            <div className="header-actions">
+              <ThemeToggle />
+            </div>
           </div>
         </header>
         <div className="site-shell">{children}</div>

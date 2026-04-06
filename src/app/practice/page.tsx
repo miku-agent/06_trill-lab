@@ -102,7 +102,7 @@ type PatternSpec = {
 
 const LEAD_IN_MS = 1800;
 const FIRST_MISS_BUFFER_MS = 5000;
-const PERFECT_WINDOW_MS = 45;
+const PERFECT_WINDOW_MS = 41.67;
 const GOOD_WINDOW_MS = 95;
 const MISS_WINDOW_MS = 150;
 const NOTE_HEIGHT_PX = 20;

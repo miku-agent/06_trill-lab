@@ -83,20 +83,15 @@ type PatternSpec = {
   key: PracticePattern;
   title: string;
   heroTitle: string;
-  heroSubtitle: string;
   statusLabel: string;
   configTitle: string;
-  configNote: string;
   railTitle: string;
   railBadges: (config: GameConfig) => string[];
-  helpIdle: string | ((config: GameConfig) => string);
-  helpPlaying: (config: GameConfig) => string;
   laneCount: number;
   activeLaneIndexes: (config: GameConfig) => number[];
   defaultBindings: (config: GameConfig) => string[];
   sequenceFor: (config: GameConfig) => number[];
   laneLabel: (lane: number, config: GameConfig) => string;
-  settingsSummary: (config: GameConfig) => string;
 };
 
 const LEAD_IN_MS = 1800;
@@ -133,29 +128,22 @@ const PRACTICE_PATTERN_SPECS: Record<PracticePattern, PatternSpec> = {
     key: "trill",
     title: "트릴",
     heroTitle: "연습 모드",
-    heroSubtitle: "중앙 2레인 트릴을 리듬게임식 레일에서 바로 연습할 수 있어요.",
     statusLabel: "TRILL PRACTICE",
     configTitle: "트릴 연습 세팅",
-    configNote: "4레인 베이스 위에서 중앙 2레인만 활성화되는 기존 트릴 연습을 유지해요.",
     railTitle: "4레인 트릴 레일",
     railBadges: (config) => ["ACTIVE: 2 / 4 레인", "NOTE WIDTH: FULL", `BEAT LINE: 1/4 · 비트 ${config.subdivision}`],
-    helpIdle: "연습을 시작하면 중앙 2레인에서 트릴 노트가 떨어져요.",
-    helpPlaying: (config) => `중앙 2레인에 맞춰 ${formatKeyLabel(config.keyBindings[0])} / ${formatKeyLabel(config.keyBindings[1])} 를 번갈아 눌러주세요.`,
     laneCount: 4,
     activeLaneIndexes: () => TRILL_ACTIVE_LANES,
     defaultBindings: () => ["a", "'"],
     sequenceFor: () => TRILL_ACTIVE_LANES,
     laneLabel: (lane) => `LANE ${lane + 1}`,
-    settingsSummary: (config) => `${formatKeyLabel(config.keyBindings[0])} / ${formatKeyLabel(config.keyBindings[1])} 중앙 2레인 트릴`,
   },
   druruk: {
     key: "druruk",
     title: "드르륵",
     heroTitle: "연습 모드",
-    heroSubtitle: "4키/6키 계단 입력을 순방향/역방향으로 바로 연습할 수 있어요.",
     statusLabel: "DRURUK",
     configTitle: "드르륵 세팅",
-    configNote: "키 수와 방향을 바꾸면 해당 계열 패턴으로 바로 판정이 바뀌어요.",
     railTitle: "드르륵 레일",
     railBadges: (config) => {
       const profile = getDrurukProfile(getDefaultDrurukVariant(config.drurukKeyCount === 4 ? 4 : 6));
@@ -168,18 +156,11 @@ const PRACTICE_PATTERN_SPECS: Record<PracticePattern, PatternSpec> = {
         `BEAT LINE: 1/4 · 비트 ${config.subdivision}`,
       ];
     },
-    helpIdle: (config) => `${config.drurukKeyCount}레인 전체에 드르륵 노트가 순서대로 떨어져요.`,
-    helpPlaying: (config) =>
-      config.direction === "forward"
-        ? `${config.drurukKeyCount}키 ${config.keyBindings.map(formatKeyLabel).join(" → ")} 순서로 눌러주세요.`
-        : `${config.drurukKeyCount}키 ${config.keyBindings.slice(0, config.drurukKeyCount).reverse().map(formatKeyLabel).join(" → ")} 순서로 눌러주세요.`,
     laneCount: 6,
     activeLaneIndexes: (config) => getDrurukLaneIndexes(config.drurukKeyCount, "forward"),
     defaultBindings: (config) => getDrurukProfile(getDefaultDrurukVariant(config.drurukKeyCount)).defaultKeys.map((key) => key.toLowerCase()),
     sequenceFor: (config) => getDrurukLaneIndexes(config.drurukKeyCount, config.direction),
     laneLabel: (lane, config) => getDrurukKeyLabels(config.drurukKeyCount)[lane] ?? `${lane + 1}번`,
-    settingsSummary: (config) =>
-      `${config.drurukKeyCount}키 · ${config.direction === "forward" ? "정방향" : "역방향"} · ${config.keyBindings.map(formatKeyLabel).join(" / ")}`,
   },
 };
 
@@ -689,7 +670,6 @@ function PracticePageContent() {
         <div>
           <p className="eyebrow">PRACTICE MODE</p>
           <h1 className="page-title">{spec.heroTitle}</h1>
-          <p className="section-subtitle">{spec.heroSubtitle}</p>
         </div>
         <div className="status-pill">{spec.statusLabel}</div>
       </section>
@@ -713,7 +693,6 @@ function PracticePageContent() {
               <p className="section-label">설정</p>
               <h2 className="section-title">{spec.configTitle}</h2>
             </div>
-            <p className="inline-note">{spec.configNote}</p>
           </div>
 
           <div className="practice-config-grid">
@@ -759,7 +738,6 @@ function PracticePageContent() {
                 onChange={(event) => setConfig((prev) => ({ ...prev, speed: clamp(Number(event.target.value) || 0, 0, 10) }))}
                 disabled={gameState === "playing"}
               />
-              <small className="practice-field-hint">속도 값을 올릴수록 판정선까지 더 빠르게 도달해요.</small>
             </label>
 
             <label className="practice-field">
@@ -839,7 +817,7 @@ function PracticePageContent() {
             ))}
           </div>
 
-          <p className={`inline-note${hasDuplicateBindings ? " is-danger" : ""}`}>{hasDuplicateBindings ? "같은 키를 중복 바인딩하면 입력 레인이 충돌할 수 있어요." : spec.settingsSummary(config)}</p>
+          {hasDuplicateBindings ? <p className="inline-note is-danger">같은 키를 중복 바인딩하면 입력 레인이 충돌할 수 있어요.</p> : null}
 
           <div className="practice-actions-row">
             {gameState !== "playing" ? (
@@ -930,13 +908,11 @@ function PracticePageContent() {
               <div className="practice-judgment-line" style={{ top: `${JUDGMENT_LINE_Y}px` }} />
             </div>
 
-            <div className="practice-rail-help">
-              {gameState === "playing"
-                ? leadInRemaining > 0
-                  ? <span>시작 준비... {leadInRemaining}</span>
-                  : <span>{spec.helpPlaying(config)}</span>
-                : <span>{typeof spec.helpIdle === "function" ? spec.helpIdle(config) : spec.helpIdle}</span>}
-            </div>
+            {gameState === "playing" && leadInRemaining > 0 ? (
+              <div className="practice-rail-help">
+                <span>시작 준비... {leadInRemaining}</span>
+              </div>
+            ) : null}
           </article>
 
           <aside className="panel practice-stats-panel">
@@ -1067,12 +1043,6 @@ function PracticePageContent() {
           color: var(--muted);
           font-size: 13px;
           font-weight: 700;
-        }
-
-        .practice-field-hint {
-          color: var(--muted);
-          font-size: 11px;
-          line-height: 1.45;
         }
 
         .practice-input,
